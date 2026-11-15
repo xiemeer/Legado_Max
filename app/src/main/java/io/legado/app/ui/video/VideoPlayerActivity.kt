@@ -54,6 +54,7 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebJsExtensions.Companion.wrapUseWebHtml
 import io.legado.app.help.webView.WebViewPool
+import io.legado.app.help.webView.WebViewPool.fitInlineContent
 import io.legado.app.help.webView.WebViewPool.installInlineContentRefitOnTouch
 import io.legado.app.help.webView.WebViewPool.prepareForInlineContent
 import io.legado.app.help.webView.WebViewPool.scheduleInlineContentFit
@@ -66,6 +67,7 @@ import io.legado.app.service.VideoPlayService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.login.SourceLoginActivity
@@ -94,6 +96,7 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import io.legado.app.help.InnerBrowserLinkResolver
 import java.lang.ref.WeakReference
+import androidx.compose.ui.platform.ComposeView
 import io.legado.app.ui.theme.LegadoTheme
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonConfiguration
@@ -104,10 +107,8 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class VideoPlayerActivity :
-    VMBaseActivity<ActivityVideoPlayerBinding, VideoPlayerViewModel>(),
-    SettingsDialog.CallBack,
-    RssFavoritesDialog.Callback {
+class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlayerViewModel>(),
+    SettingsDialog.CallBack,RssFavoritesDialog.Callback {
 
     companion object {
         @Volatile
@@ -140,14 +141,14 @@ class VideoPlayerActivity :
             introTextView,
             lifecycle,
             imgAvailableWidth,
-            VideoPlay.source?.getKey(),
+            VideoPlay.source?.getKey()
         )
     }
 
     private val textViewTagHandler by lazy {
         TextViewTagHandler(object : TextViewTagHandler.OnButtonClickListener {
             override fun onButtonClick(name: String, click: String) {
-                viewModel.onButtonClick(this@VideoPlayerActivity, "info button $name", click)
+                viewModel.onButtonClick(this@VideoPlayerActivity, "info button $name" , click)
             }
         })
     }
@@ -156,9 +157,11 @@ class VideoPlayerActivity :
     private var isFullScreen = false
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var menuCustomBtn: MenuItem? = null
-
     // 标记当前实例正被新实例替换，跳过 finish 弹窗和 onDestroy 中的 saveRead
     private var isFinishingDueToReplacement = false
+    // 标记当前实例正把播放移交给悬浮窗：此时 VideoPlay 里的静态播放态引用要交给服务消费，
+    // 不能在 onDestroy 中清空（否则服务 clonePlayState 拿到 null，小窗无法接管播放）
+    private var isHandoffToFloatingWindow = false
     private val bookSourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -210,6 +213,8 @@ class VideoPlayerActivity :
             startNewSession()
         } else {
             VideoPlay.clonePlayState(playerView)
+            // 从小窗回到播放页：参数已拷入本实例，断开静态引用，避免持有已销毁的悬浮窗/服务
+            VideoPlay.clearPlayState()
             playerView.setSurfaceToPlay()
             playerView.startAfterPrepared()
             binding.titleBar.title = VideoPlay.videoTitle
@@ -301,12 +306,12 @@ class VideoPlayerActivity :
                     onBackA = { performQuickJump(-VideoPlay.quickJumpMinutesA) },
                     onBackB = { performQuickJump(-VideoPlay.quickJumpMinutesB) },
                     onForwardB = { performQuickJump(VideoPlay.quickJumpMinutesB) },
-                    onForwardA = { performQuickJump(VideoPlay.quickJumpMinutesA) },
+                    onForwardA = { performQuickJump(VideoPlay.quickJumpMinutesA) }
                 )
             }
         }
     }
-
+    
     private fun updateQuickJumpButtonsState() {
         // 非全屏模式：根据开关状态更新 ComposeView 可见性和内容
         if (VideoPlay.quickJumpButtonsEnabled && !isFullScreen && VideoPlay.book != null) {
@@ -320,7 +325,7 @@ class VideoPlayerActivity :
                         onBackA = { performQuickJump(-VideoPlay.quickJumpMinutesA) },
                         onBackB = { performQuickJump(-VideoPlay.quickJumpMinutesB) },
                         onForwardB = { performQuickJump(VideoPlay.quickJumpMinutesB) },
-                        onForwardA = { performQuickJump(VideoPlay.quickJumpMinutesA) },
+                        onForwardA = { performQuickJump(VideoPlay.quickJumpMinutesA) }
                     )
                 }
             }
@@ -352,12 +357,12 @@ class VideoPlayerActivity :
     }
 
     inner class CustomWebViewClient(
-        private val source: io.legado.app.data.entities.BaseSource?,
+        private val source: io.legado.app.data.entities.BaseSource?
     ) : WebViewClient() {
         private val jsStr = buildUseWebInjection(source)
         override fun shouldOverrideUrlLoading(
             view: WebView?,
-            request: WebResourceRequest?,
+            request: WebResourceRequest?
         ): Boolean {
             request?.let {
                 val uri = it.url
@@ -436,8 +441,8 @@ class VideoPlayerActivity :
                     showDialogFragment(PhotoDialog(it, VideoPlay.source?.getKey()))
                 },
                 imgOnClickListener = {
-                    viewModel.onButtonClick(this@VideoPlayerActivity, "info image", it)
-                },
+                    viewModel.onButtonClick(this@VideoPlayerActivity, "info image" , it)
+                }
             )
         } else if (intro.startsWith("<md>")) {
             val lastIndex = intro.lastIndexOf("<")
@@ -465,9 +470,9 @@ class VideoPlayerActivity :
                                     .applyDefaultRequestOptions(
                                         RequestOptions()
                                             .override(imgAvailableWidth)
-                                            .encodeQuality(88),
-                                    ),
-                            ),
+                                            .encodeQuality(88)
+                                    )
+                            )
                         )
                         .usePlugin(HtmlPlugin.create())
                         .usePlugin(TablePlugin.create(context))
@@ -479,7 +484,7 @@ class VideoPlayerActivity :
                     markdown,
                     imgOnLongClickListener = { source ->
                         showDialogFragment(PhotoDialog(source, VideoPlay.source?.getKey()))
-                    },
+                    }
                 )
             }
         } else {
@@ -541,7 +546,7 @@ class VideoPlayerActivity :
         val recyclerView = binding.chapters
         val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerView.layoutManager = layoutManager
-        val adapter = ChapterAdapter(toc, VideoPlay.chapterInVolumeIndex, false) { chapter, index ->
+        val adapter = ChapterAdapter(toc,VideoPlay.chapterInVolumeIndex, false) { chapter, index ->
             if (index != VideoPlay.chapterInVolumeIndex) {
                 VideoPlay.chapterInVolumeIndex = index
                 VideoPlay.saveRead(0)
@@ -557,7 +562,7 @@ class VideoPlayerActivity :
         val recyclerView = binding.volumes
         val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerView.layoutManager = layoutManager
-        val adapter = ChapterAdapter(volumes, VideoPlay.durVolumeIndex, true) { chapter, index ->
+        val adapter = ChapterAdapter(volumes,VideoPlay.durVolumeIndex, true) { chapter, index ->
             if (index != VideoPlay.durVolumeIndex) {
                 VideoPlay.durVolumeIndex = index
                 VideoPlay.chapterInVolumeIndex = 0
@@ -618,9 +623,9 @@ class VideoPlayerActivity :
         if (isFullScreen) {
             orientation = requestedOrientation
             requestedOrientation = if (VideoPlay.isPortraitVideo) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT // 竖屏
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT //竖屏
             } else {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE // 横屏
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE //横屏
             }
             supportActionBar?.hide()
             binding.chaptersContainer.gone()
@@ -643,6 +648,7 @@ class VideoPlayerActivity :
             upView()
         }
     }
+
 
     @Suppress("DEPRECATION")
     @SuppressLint("SwitchIntDef")
@@ -677,23 +683,31 @@ class VideoPlayerActivity :
         layoutParams.width = screenWidth
         val videoWidth = playerView.currentVideoWidth
         val videoHeight = playerView.currentVideoHeight
-        val height = if (videoWidth > 0 && videoHeight > 0) (screenWidth * videoHeight / videoWidth) else (screenWidth * 9 / 16) // 默认16:9
-        // 高度不超过一半屏幕
+        val height = if (videoWidth > 0 && videoHeight > 0) (screenWidth * videoHeight / videoWidth) else (screenWidth * 9 / 16) //默认16:9
+        //高度不超过一半屏幕
         layoutParams.height = if (height < screenHeight / 2) height else screenHeight / 2
         playerView.layoutParams = layoutParams
-        playerView.isNeedOrientationUtils = false // 关闭自带的屏幕方向控制
+        playerView.isNeedOrientationUtils = false //关闭自带的屏幕方向控制
+        //R7：横屏小窗按钮与竖屏标题栏菜单共用同一悬浮窗入口
+        playerView.onFloatWindowClick = { startFloatingWindow() }
         playerView.fullscreenButton.setOnClickListener { toggleFullScreen() }
-        playerView.setBackFromFullScreenListener { toggleFullScreen() }
+        // 这个监听器会被 gsy 的 cloneParams() 复制到小窗播放器上，而小窗（挂在 Service 上）
+        // 比本 Activity 活得久 —— 直接传 lambda 会让小窗强持有已销毁的 Activity。
+        // 用弱引用包一层：退到小窗后本 Activity 可被回收，回调自动变 no-op。
+        val backFromFull = WeakReference(this)
+        playerView.setBackFromFullScreenListener {
+            backFromFull.get()?.toggleFullScreen()
+        }
         playerView.setVideoAllCallBack(object : GSYSampleCallBack() {
             @SuppressLint("SourceLockedOrientationActivity")
             override fun onPrepared(url: String?, vararg objects: Any?) {
                 super.onPrepared(url, *objects)
                 playerView.post {
                     val player = playerView.getCurrentPlayer()
-                    if (VideoPlay.lockCurScreen && !player.getLockCurScreen()) {
+                    if (VideoPlay.lockCurScreen &&  !player.getLockCurScreen()) {
                         player.lockTouchLogic()
                     }
-                    // 根据实际视频比例再次调整
+                    //根据实际视频比例再次调整
                     val videoWidth = playerView.currentVideoWidth
                     val videoHeight = playerView.currentVideoHeight
                     if (videoWidth > 0 && videoHeight > 0) {
@@ -703,7 +717,7 @@ class VideoPlayerActivity :
                         val isPortraitVideo = if (aspectRatio > 1.2) true else false
                         VideoPlay.isPortraitVideo = isPortraitVideo
                         if (isFullScreen && isPortraitVideo) {
-                            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT // 提前进入了全屏，并且默认横屏了，纠正回来
+                            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT //提前进入了全屏，并且默认横屏了，纠正回来
                             return@post
                         }
                         if (VideoPlay.startFull && VideoPlay.autoPlay && !isFullScreen) {
@@ -713,7 +727,7 @@ class VideoPlayerActivity :
                         val height = (parentWidth * aspectRatio).toInt()
                         val displayMetrics = resources.displayMetrics
                         val screenHeight = displayMetrics.heightPixels
-                        // 高度不超过一半屏幕
+                        //高度不超过一半屏幕
                         layoutParams.height = if (height < screenHeight / 2) height else screenHeight / 2
                         playerView.layoutParams = layoutParams
                     }
@@ -733,7 +747,7 @@ class VideoPlayerActivity :
         }
         starMenuItem = menu.findItem(R.id.menu_rss_star)
         upStarMenu()
-        // 订阅源/直链视频没有章节可缓存，直接隐藏；书籍视频才给缓存入口
+        //订阅源/直链视频没有章节可缓存，直接隐藏；书籍视频才给缓存入口
         menu.findItem(R.id.menu_video_cache)?.apply {
             isVisible = VideoPlay.book != null
             icon?.setTintMutate(primaryTextColor)
@@ -747,7 +761,7 @@ class VideoPlayerActivity :
             starMenuItem?.setIcon(R.drawable.ic_star)
             starMenuItem?.setTitle(R.string.in_favorites)
             starMenuItem?.icon?.setTintMutate(primaryTextColor)
-        } else if (VideoPlay.rssRecord != null) {
+        } else if(VideoPlay.rssRecord != null) {
             starMenuItem?.isVisible = true
             starMenuItem?.setIcon(R.drawable.ic_star_border)
             starMenuItem?.setTitle(R.string.out_favorites)
@@ -765,7 +779,7 @@ class VideoPlayerActivity :
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_custom_btn -> {
-                (VideoPlay.source as? BookSource)?.let { source ->
+                (VideoPlay.source as? BookSource)?.let {source ->
                     VideoPlay.book?.let { book ->
                         SourceCallBack.callBackBtn(
                             this,
@@ -773,7 +787,7 @@ class VideoPlayerActivity :
                             source,
                             book,
                             VideoPlay.chapter,
-                            BookType.video,
+                            BookType.video
                         )
                     }
                 }
@@ -784,8 +798,8 @@ class VideoPlayerActivity :
             R.id.menu_float_window -> startFloatingWindow()
             R.id.menu_video_cache -> showVideoCacheRangeDialog()
             R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this))
-            R.id.menu_login -> VideoPlay.source?.let { s ->
-                when (s) {
+            R.id.menu_login -> VideoPlay.source?.let {s ->
+               when (s) {
                     is BookSource -> {
                         startActivity<SourceLoginActivity> {
                             putExtra("bookType", BookType.video)
@@ -802,7 +816,7 @@ class VideoPlayerActivity :
 
             R.id.menu_copy_video_url -> {
                 val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()) {
+                if (url.isNullOrBlank()){
                     this.toastOnUi("暂无播放地址")
                     return true
                 }
@@ -814,7 +828,7 @@ class VideoPlayerActivity :
                         it,
                         VideoPlay.chapter,
                         BookType.video,
-                        url,
+                        url
                     ) {
                         sendToClip(url)
                     }
@@ -822,7 +836,7 @@ class VideoPlayerActivity :
             }
             R.id.menu_open_other_video_player -> {
                 val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()) {
+                if (url.isNullOrBlank()){
                     this.toastOnUi("暂无播放地址")
                     return true
                 }
@@ -831,7 +845,7 @@ class VideoPlayerActivity :
                 }
                 startActivity(intent)
             }
-            R.id.menu_edit_source -> VideoPlay.source?.let { s ->
+            R.id.menu_edit_source -> VideoPlay.source?.let {s  ->
                 when (s) {
                     is BookSource -> bookSourceEditResult.launch {
                         putExtra("sourceUrl", s.getKey())
@@ -853,34 +867,51 @@ class VideoPlayerActivity :
      */
     private fun showVideoCacheRangeDialog() {
         val book = VideoPlay.book ?: return
-        showDialogFragment(
-            VideoCacheRangeDialog { start, end ->
-                // CacheBook 按 bookUrl 取书，书还没入库（例如没放入书架）时缓存不成立，先查一次目录避免静默失败
-                lifecycleScope.launch(IO) {
-                    val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl, start - 1, end - 1)
-                    if (chapters.isEmpty()) {
-                        toastOnUi(R.string.chapter_list_empty)
-                    } else {
-                        CacheBook.start(this@VideoPlayerActivity, book, start - 1, end - 1)
-                        toastOnUi(R.string.download_start)
-                    }
+        showDialogFragment(VideoCacheRangeDialog { start, end ->
+            //CacheBook 按 bookUrl 取书，书还没入库（例如没放入书架）时缓存不成立，先查一次目录避免静默失败
+            lifecycleScope.launch(IO) {
+                val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl, start - 1, end - 1)
+                if (chapters.isEmpty()) {
+                    toastOnUi(R.string.chapter_list_empty)
+                } else {
+                    CacheBook.start(this@VideoPlayerActivity, book, start - 1, end - 1)
+                    toastOnUi(R.string.download_start)
                 }
-            },
-        )
+            }
+        })
     }
 
     private fun startFloatingWindow() {
-        VideoPlay.savePlayState(playerView)
+        // 接管媒体的是"当前真正在播放"的那个实例：竖屏是 playerView 本身，横屏是全屏克隆实例。
+        // 为什么必须是 getCurrentPlayer()：gsy 全屏时把画面克隆到一个新实例上，小屏 playerView
+        // 已不是媒体监听者，它的进度/播放态停在进入全屏前（甚至 mHadPlay=false）。
+        // 直接保存 playerView 会让小窗克隆到这份陈旧状态 —— 表现为画面冻结在某一帧、按钮显示▶。
+        // 为什么两个都要 needDestroy=false：Activity 窗口销毁时，实例的 onSurfaceDestroyed
+        // 会走 gsy 的 super 分支把媒体一起释放，小窗随之冻结在最后一帧（横屏特有，竖屏正常）。
+        val handingOffPlayer = playerView.getCurrentPlayer()
+        VideoPlay.savePlayState(handingOffPlayer)
+        playerView.needDestroy = false
+        handingOffPlayer.needDestroy = false
         // 启动悬浮窗服务
         val intent = Intent(this, VideoPlayService::class.java).apply {
             putExtra("isNew", false)
         }
         ContextCompat.startForegroundService(this, intent)
-        playerView.needDestroy = false
-        finish() // 如果在播放器复刻前活动被销毁，会导致状态继承异常（这里服务创建很快，没发现异常）
+        // 注意：光在这里清 playerView（本 Activity 的实例）**并不能**解决小窗那条泄漏。
+        // gsy 的 cloneParams() 是在服务侧复制到 FloatingPlayer 上的，泄漏链指向的是
+        // FloatingPlayer → mBackFromFullScreenListener，清本 Activity 的实例无效。
+        // 真正的两处修复：
+        //   1) 下面把监听器包成"弱引用持有 this"，即使被复制过去也不会强引用 Activity；
+        //   2) VideoPlayService.onStartCommand 在 setupPlayerView() 之后对 FloatingPlayer 显式置空。
+        playerView.setBackFromFullScreenListener(null)
+        playerView.setVideoAllCallBack(null)
+        // 标记本次销毁是"移交给小窗"，静态播放态引用要留给服务消费，不能在 onDestroy 里清掉
+        isHandoffToFloatingWindow = true
+        finish() //如果在播放器复刻前活动被销毁，会导致状态继承异常（这里服务创建很快，没发现异常）
     }
 
     override fun observeLiveBus() {
+
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             binding.titleBar.title = it
         }
@@ -898,6 +929,7 @@ class VideoPlayerActivity :
             // 更新播放器静音状态
             playerView.setMute(VideoPlay.mutePlay)
         }
+
     }
 
     override fun finish() {
@@ -967,6 +999,13 @@ class VideoPlayerActivity :
      */
     override fun onPause() {
         super.onPause()
+        // 移交给小窗时不能暂停：本 Activity 退到后台是为了让悬浮窗接管播放，
+        // 无条件 onPause() 会让小窗一接管就是暂停态（画面定格、"▶"按钮），
+        // 用户必须先点一下才继续播放。这里只记录阅读时长，不打断播放。
+        if (isHandoffToFloatingWindow) {
+            VideoPlay.flushReadTime()
+            return
+        }
         VideoPlay.onPause()
     }
 
@@ -998,8 +1037,27 @@ class VideoPlayerActivity :
             VideoPlay.saveRead()
             VideoPlay.stopLoading()
         }
-        // 以下操作的是本实例自己的资源，被替换时也必须执行，否则媒体播放器资源泄漏
-        playerView.getCurrentPlayer().release()
+        // 移交给小窗时不能释放播放器：媒体要交给悬浮窗继续播。
+        // 横屏时 getCurrentPlayer() 返回的恰恰是"正在播放的全屏克隆实例"，
+        // 在这里 release() 会把刚移交的媒体释放掉 —— 这正是"横屏进小窗画面冻结在第一帧"的根因
+        //（竖屏时服务已先把监听者抢过去，isCurrentMediaListener() 为 false 才侥幸没触发，所以竖屏正常）。
+        // 未移交（正常退出/被替换）时才释放，避免资源泄漏。
+        if (!isHandoffToFloatingWindow) {
+            playerView.getCurrentPlayer().release()
+        }
+        // 网络状态监听必须无条件注销 —— 与是否移交小窗无关。
+        // 横屏会存在两个实例（小屏 + 全屏克隆），全屏那个不一定走 release()，
+        // 它的 ConnectivityBroadcastReceiver 会留在 LoadedApk.mReceivers 里，
+        // 经 mNetChangeListener → GSYVideoView$3 → this$0 把本 Activity 挂住（LeakCanary 实测的泄漏）。
+        // 两个实例都清一遍；该方法幂等，重复调用安全。
+        playerView.releaseNetworkStateForGood()
+        playerView.peekFullWindowPlayer()?.releaseNetworkStateForGood()
+        // 静态播放态引用若仍指向本实例（且本次不是移交给小窗），必须断开：
+        // 否则 VideoPlay.sMediaPlayerListener 会长期持有已销毁的 Activity（LeakCanary 报的 APPLICATION LEAK）。
+        // 移交给小窗时引用要留给服务 clonePlayState 消费，由服务侧 clone 完成后 clearPlayState()。
+        if (!isHandoffToFloatingWindow) {
+            VideoPlay.clearPlayState()
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 

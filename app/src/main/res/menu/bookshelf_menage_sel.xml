@@ -22,8 +22,20 @@
         android:title="@string/remove_group" />
 
     <item
+        android:id="@+id/menu_set_tags"
+        android:title="@string/batch_set_tag" />
+
+    <item
         android:id="@+id/menu_change_source"
         android:title="@string/change_source_batch" />
+
+    <item
+        android:id="@+id/menu_change_url"
+        android:title="@string/batch_change_url" />
+
+    <item
+        android:id="@+id/menu_save_cover"
+        android:title="@string/batch_save_cover" />
 
     <item
         android:id="@+id/menu_clear_cache"

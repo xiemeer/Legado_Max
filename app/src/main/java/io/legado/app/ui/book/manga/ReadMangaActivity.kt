@@ -21,6 +21,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.integration.recyclerview.RecyclerViewPreloader
 import com.bumptech.glide.request.target.Target.SIZE_ORIGINAL
 import com.bumptech.glide.util.FixedPreloadSizeProvider
+import com.google.android.material.snackbar.Snackbar
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -453,6 +454,36 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    /**
+     * 本章图片全部就绪：页面内状态条常驻数秒，明确可见（不再用一闪而过的 Toast）。
+     * 上游已在 IO 协程完成本地图片导入与"文件就绪"判定，这里只做一次轻量 UI 提示。
+     */
+    override fun onChapterImagesReady() {
+        if (isFinishing || isDestroyed) return
+        val count = ReadManga.curMangaChapter?.imageCount ?: 0
+        val text = if (count > 0) {
+            "本章图片已全部加载完成（$count 张）"
+        } else {
+            "本章图片已全部加载完成"
+        }
+        runCatching {
+            Snackbar.make(binding.root, text, 5000).show()
+        }.getOrElse {
+            toastOnUi(text)
+        }
+    }
+
+    /** 离线兜底成功：明确告知用户当前展示的是本地已下载图片及张数，不谎报"全章就绪"。 */
+    override fun onChapterOfflineReady(count: Int) {
+        if (isFinishing || isDestroyed) return
+        val text = "离线已下载 $count 张，已按本地图片显示"
+        runCatching {
+            Snackbar.make(binding.root, text, 5000).show()
+        }.getOrElse {
+            toastOnUi(text)
+        }
+    }
+
     override fun scrollBy(distance: Int) {
         if (!binding.recyclerView.canScroll(1)) {
             return
@@ -567,6 +598,8 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                     }
                 }
             }
+
+            R.id.menu_export_chapter_images -> viewModel.exportChapterImages()
 
             R.id.menu_manga_footer_config -> {
                 showDialogFragment(MangaFooterSettingDialog())

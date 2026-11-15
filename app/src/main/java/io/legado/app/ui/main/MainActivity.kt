@@ -33,6 +33,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import android.os.Build
+import android.os.Environment
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -53,6 +54,8 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.permission.Permissions
+import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.theme.ThemeTransition
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
@@ -354,6 +357,29 @@ class MainActivity :
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
+        // 关键初始化不等待任何引导弹窗。
+        // privacyPolicy / upVersion / setLocalPassword 都是 suspendCancellableCoroutine：
+        // 弹窗不关闭就永不返回，若把它们排在前面，书架回调与自动刷新会一直挂起，
+        // 界面已显示却没有数据、点了没反应，表现就是「打开 app 卡死」。装新版首次启动
+        // 必定弹更新日志，所以这个现象在每次升级后第一次打开时最明显。
+        viewModel.setActivityCallback(this@MainActivity)
+        // 自动更新书源
+        binding.viewPagerMain.postDelayed(1000) {
+            viewModel.ruleSubsUp()
+        }
+        // 自动更新书籍（recreate 走重启路径时标记通过 intent 传递，见 recreate()）
+        val isAutoRefreshedBook = savedInstanceState?.getBoolean("isAutoRefreshedBook")
+            ?: intent.getBooleanExtra("isAutoRefreshedBook", false)
+        if (AppConfig.autoRefreshBook && !isAutoRefreshedBook) {
+            // 每次进入书架后5秒自动更新书籍目录
+            binding.viewPagerMain.postDelayed(5000) {
+                viewModel.upAllBookToc()
+            }
+        }
+        binding.viewPagerMain.postDelayed(3000) {
+            viewModel.postLoad()
+        }
+        // 引导类弹窗单独串行展示，彼此不叠加，也不阻塞上面的初始化
         lifecycleScope.launch {
             // 隐私协议
             if (!privacyPolicy()) return@launch
@@ -361,27 +387,11 @@ class MainActivity :
             upVersion()
             // 设置本地密码
             setLocalPassword()
+            // 所有文件访问权限引导（首次启动，装在最后避免与其他引导弹窗叠加）
+            guideAllFilesAccess()
             notifyAppCrash()
             // 备份同步
             backupSync()
-            // 设置回调
-            viewModel.setActivityCallback(this@MainActivity)
-            // 自动更新书源
-            binding.viewPagerMain.postDelayed(1000) {
-                viewModel.ruleSubsUp()
-            }
-            // 自动更新书籍（recreate 走重启路径时标记通过 intent 传递，见 recreate()）
-            val isAutoRefreshedBook = savedInstanceState?.getBoolean("isAutoRefreshedBook")
-                ?: intent.getBooleanExtra("isAutoRefreshedBook", false)
-            if (AppConfig.autoRefreshBook && !isAutoRefreshedBook) {
-                // 每次进入书架后5秒自动更新书籍目录
-                binding.viewPagerMain.postDelayed(5000) {
-                    viewModel.upAllBookToc()
-                }
-            }
-            binding.viewPagerMain.postDelayed(3000) {
-                viewModel.postLoad()
-            }
         }
     }
 
@@ -552,7 +562,7 @@ class MainActivity :
         if (LocalConfig.versionCode == appInfo.versionCode) {
             if (AppConfig.autoUpdateVariant) {
                 if (LocalConfig.lastCheckUpdate + 24.hours.inWholeMilliseconds < System.currentTimeMillis()) {
-                    AppUpdate.gitHubUpdate.check(lifecycleScope)
+                    AppUpdate.giteeUpdate.check(lifecycleScope)
                         .onSuccess {
                             showDialogFragment(
                                 UpdateDialog(it),
@@ -573,7 +583,10 @@ class MainActivity :
             }
             showDialogFragment(dialog)
         } else if (!BuildConfig.DEBUG) {
+            // 更新日志多年累积已超 100KB，全量交给 Markwon + TextView 会让弹窗首帧很慢。
+            // 只渲染最近几条版本记录，完整历史仍原样保留在 assets 中。
             val log = String(assets.open("web/help/md/updateLog.md").readBytes())
+                .recentChangeLog(5)
             val dialog = TextDialog(getString(R.string.update_log), log, TextDialog.Mode.MD, "updateLog")
             dialog.setOnDismissListener {
                 block.resume(null)
@@ -582,6 +595,25 @@ class MainActivity :
         } else {
             block.resume(null)
         }
+    }
+
+    /**
+     * 取更新日志里最近 [count] 个版本条目（含文件头）。
+     * 条目以 "### " 开头；不足 [count] 条时原样返回全文。
+     */
+    private fun String.recentChangeLog(count: Int): String {
+        val lines = lines()
+        var seen = 0
+        for (i in lines.indices) {
+            if (lines[i].startsWith("### ")) {
+                seen++
+                if (seen > count) {
+                    return lines.subList(0, i).joinToString("\n").trimEnd() +
+                        "\n\n> 仅显示最近 $count 条更新记录。\n"
+                }
+            }
+        }
+        return this
     }
 
     /**
@@ -607,6 +639,40 @@ class MainActivity :
             }
             cancelButton {
                 LocalConfig.password = ""
+            }
+        }
+    }
+
+    /**
+     * 首次启动引导「所有文件访问权限」。
+     *
+     * Android 11(R) 起访问 Download 目录需要 MANAGE_EXTERNAL_STORAGE。没有它时：
+     * - 已下载的漫画图片（Download/阅读器/...）读不到，本地命中恒为 0；
+     * - 卸载重装后 MediaStore 记录一并清空，又没有文件系统兜底，表现为"下载过却全没了"。
+     * 这类问题只能靠用户手动授权解决，所以装完就引导一次，别等他用出问题再找原因。
+     *
+     * 只问一次（[LocalConfig.allFilesAccessPrompted]）：卸载重装会连 SharedPreferences 一起清空，
+     * 那时自然会重新问；「以后再说」也记为已问过，避免每次启动骚扰。
+     */
+    private fun guideAllFilesAccess() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (Environment.isExternalStorageManager()) return
+        if (LocalConfig.allFilesAccessPrompted) return
+        LocalConfig.allFilesAccessPrompted = true
+        // 延后到首帧之后：启动期弹窗会和主界面布局、书架的首次数据加载抢同一帧
+        binding.viewPagerMain.postDelayed(800) {
+            if (isFinishing || isDestroyed) return@postDelayed
+            alert(
+                getString(R.string.all_files_access_title),
+                getString(R.string.all_files_access_message),
+            ) {
+                positiveButton(R.string.all_files_access_go) {
+                    PermissionsCompat.Builder()
+                        .addPermissions(*Permissions.Group.STORAGE)
+                        .rationale(R.string.all_files_access_message)
+                        .request()
+                }
+                negativeButton(R.string.all_files_access_later)
             }
         }
     }

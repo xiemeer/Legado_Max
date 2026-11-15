@@ -77,6 +77,18 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
     /** 当前书架的书籍列表 */
     abstract val books: List<Book>
 
+    /**
+     * 「按标签搜索」的当前关键词；null 表示未启用筛选。
+     *
+     * 只保存在内存里：它是临时查找手段，切分组或重进 App 后不应继续压着书架。
+     * 子页刷新数据源时读取它做过滤，输入框再次打开会预填，清空后确定即取消筛选。
+     */
+    protected var tagSearchKey: String? = null
+        private set
+
+    /** 关键词变化后由子页刷新自己的数据源；未覆写表示该样式不支持按标签搜索 */
+    open fun onTagSearchChanged(key: String?) {}
+
     /** 是否只更新已读书籍的目录 */
     abstract var onlyUpdateRead: Boolean
 
@@ -105,6 +117,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
         when (item.itemId) {
             R.id.menu_remote -> startActivity<RemoteBookActivity>()
             R.id.menu_search -> startActivity<SearchActivity>()
+            R.id.menu_tag_search -> showTagSearchAlert()
             R.id.menu_update_toc -> activityViewModel.upToc(books, onlyUpdateRead)
             R.id.menu_bookshelf_layout -> configBookshelf()
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
@@ -172,6 +185,36 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                     waitDialog.setText("添加中...")
                     waitDialog.show()
                     viewModel.addBookByUrl(it)
+                }
+            }
+            cancelButton()
+        }
+    }
+
+    /**
+     * 按标签搜索（书架内过滤，不联网）。
+     *
+     * 一个输入框同时匹配：书名、作者、自定义标签、书源来源标签（详情页抓到的 kind）。
+     * 之所以把 kind 也纳进来——二级标签栏只能看到「自定义标签/智能标签」，
+     * 书源自带的「玄幻/都市」这类标签原先只能看不能用，这里补上按它找书的入口。
+     * 多个关键词用空格分隔，取「与」关系；留空确定即清除筛选。
+     */
+    @SuppressLint("InflateParams")
+    fun showTagSearchAlert() {
+        alert(titleResource = R.string.bookshelf_tag_search) {
+            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
+                editView.hint = getString(R.string.bookshelf_tag_search_hint)
+                editView.setText(tagSearchKey)
+            }
+            customView { alertBinding.root }
+            okButton {
+                val key = alertBinding.editView.text?.toString()?.trim()?.ifEmpty { null }
+                tagSearchKey = key
+                onTagSearchChanged(key)
+                if (key == null) {
+                    toastOnUi(R.string.bookshelf_tag_filter_all)
+                } else {
+                    toastOnUi(getString(R.string.bookshelf_tag_search) + "：" + key)
                 }
             }
             cancelButton()

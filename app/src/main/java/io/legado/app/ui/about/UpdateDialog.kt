@@ -101,7 +101,7 @@ class UpdateDialog() : BaseDialogFragment(R.layout.dialog_update) {
     }
 
     private fun showAllVersionsDialog() {
-        AppUpdate.gitHubUpdate.getAllVariants(lifecycleScope)
+        AppUpdate.giteeUpdate.getAllVariants(lifecycleScope)
             .onSuccess { variants: List<AppUpdate.UpdateInfo> ->
                 if (variants.isEmpty()) {
                     toastOnUi("没有其他版本")

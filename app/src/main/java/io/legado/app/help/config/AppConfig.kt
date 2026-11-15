@@ -936,16 +936,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val showAddToShelfAlert get() = appCtx.getPrefBoolean(PreferKey.showAddToShelfAlert, true)
 
-    /** 阅读达到设定时长后自动加入书架，默认关闭。 */
-    var autoAddShelfEnabled
-        get() = appCtx.getPrefBoolean(PreferKey.autoAddShelfEnabled, false)
-        set(value) = appCtx.putPrefBoolean(PreferKey.autoAddShelfEnabled, value)
-
-    /** 读到该时长（分钟）后自动加入书架，未设置时按 3 分钟，至少 1 分钟。 */
-    var autoAddShelfMinMinutes
-        get() = appCtx.getPrefInt(PreferKey.autoAddShelfMinMinutes, 3).coerceAtLeast(1)
-        set(value) = appCtx.putPrefInt(PreferKey.autoAddShelfMinMinutes, value)
-
     val ignoreAudioFocus get() = appCtx.getPrefBoolean(PreferKey.ignoreAudioFocus, false)
 
     var pauseReadAloudWhilePhoneCalls

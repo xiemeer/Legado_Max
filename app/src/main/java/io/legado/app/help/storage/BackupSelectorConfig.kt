@@ -1,6 +1,7 @@
 package io.legado.app.help.storage
 
 import io.legado.app.data.repository.CoverGalleryRepository
+import io.legado.app.help.book.BookLocalCover
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -43,6 +44,7 @@ object BackupSelectorConfig {
 
     val allItems = listOf(
         BackupItem("coverGallery", CoverGalleryRepository.backupDirName, "封面图集", "配置", "🖼️"),
+        BackupItem("bookCovers", BookLocalCover.BACKUP_DIR_NAME, "本地书籍封面", "其他", "🖼️"),
         BackupItem("bookshelf", "bookshelf.json", "书架", "数据库", "📚"),
         BackupItem("bookChapter", "bookChapter.json", "章节目录", "数据库", "📖"),
         BackupItem("bookmark", "bookmark.json", "书签", "数据库", "🔖"),

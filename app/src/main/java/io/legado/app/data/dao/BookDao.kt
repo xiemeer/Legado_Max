@@ -12,6 +12,7 @@ import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.book.BookLocalCover
 import io.legado.app.help.book.isNotShelf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -89,7 +90,9 @@ data class BookShelfDisplay(
     val isImage: Boolean
         get() = type and BookType.image > 0
 
-    fun getDisplayCover(): String? = if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl
+    fun getDisplayCover(): String? = BookLocalCover.resolve(
+        if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl
+    )
 
     fun getDisplayIntro(): String? = if (customIntro.isNullOrEmpty()) intro else customIntro
 
@@ -444,6 +447,14 @@ interface BookDao {
     @Query("update books set origin = :newUrl where origin = :oldUrl")
     fun updateOrigin(oldUrl: String, newUrl: String): Int
 
+    /**
+     * 批量改地址（A 模式）：只把指定书籍挂到新书源上，不碰 bookUrl / 章节 / 进度 / 缓存。
+     * 与 [updateOrigin] 的区别是按书籍书源迁移 vs 按 bookUrl 精确指定，
+     * 后者用于书架管理里只对选中书籍生效。
+     */
+    @Query("update books set origin = :origin, originName = :originName where bookUrl in (:bookUrls)")
+    fun updateOriginOfBooks(bookUrls: List<String>, origin: String, originName: String): Int
+
     @get:Query("select count(bookUrl) from books where (SELECT sum(groupId) FROM book_groups)")
     val noGroupSize: Int
 
@@ -461,6 +472,25 @@ interface BookDao {
 
     @get:Query("SELECT * FROM books where type & ${BookType.text} > 0 ORDER BY durChapterTime DESC limit 1")
     val lastReadBook: Book?
+
+    /**
+     * 最近阅读的一本书，**不限类型**（漫画/音频/本地书都算）。
+     *
+     * 冷启动恢复阅读进度时用它：[lastReadBook] 只认 text 类型，漫画书（type=image）会被过滤掉，
+     * 于是漫画用户重开 App 会被丢到上一次看过的小说里。类型分流交给调用方
+     * （`startActivityForBook` 会按 isImage/isAudio/isLocal 选具体阅读器）。
+     */
+    @get:Query("SELECT * FROM books ORDER BY durChapterTime DESC limit 1")
+    val lastReadBookAny: Book?
+
+    /**
+     * 最近阅读的漫画书（type 含 image 位）。
+     *
+     * 给漫画阅读器做兜底：它按 bookUrl 精确取书，只有在没带 bookUrl 时才会走到这里。
+     * 用 [lastReadBook] 兜底会取到文字书，然后拿文字书去跑图片排版，属于错配。
+     */
+    @get:Query("SELECT * FROM books where type & ${BookType.image} > 0 ORDER BY durChapterTime DESC limit 1")
+    val lastReadImageBook: Book?
 
     @get:Query("SELECT bookUrl FROM books")
     val allBookUrls: List<String>

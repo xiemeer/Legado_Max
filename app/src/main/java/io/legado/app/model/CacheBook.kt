@@ -51,6 +51,13 @@ import kotlin.coroutines.CoroutineContext
 
 object CacheBook {
 
+    /**
+     * 缓存全书时，单章内图片的并行下载数。
+     * 章节级并行度由 CacheBookService 的线程池控制（最多 AppConst.MAX_THREAD 条），
+     * 两者相乘才是真正的并发；原先这里写死 1，导致每章图片只能一张一张下。
+     */
+    private const val IMAGE_CONCURRENCY_PER_CHAPTER = 4
+
     val cacheBookMap = ConcurrentHashMap<String, CacheBookModel>()
 
     private val workingState = MutableStateFlow(true)
@@ -496,7 +503,10 @@ object CacheBook {
             if (BookHelp.hasContent(book, chapter)) {
                 val task = Coroutine.async(scope, context, executeContext = context) {
                     BookHelp.getContent(book, chapter)?.let {
-                        BookHelp.saveImages(bookSource, book, chapter, it, 1)
+                        // 原先固定传 1，等于"每章图片一张一张串行下载"，
+                        // 章节池只有 MAX_THREAD 条线，整体并发被压到个位数。
+                        // 每章给 4 张并行，配合 OkHttp 单域名 32 并发，缓存全书才跑得起来。
+                        BookHelp.saveImages(bookSource, book, chapter, it, IMAGE_CONCURRENCY_PER_CHAPTER)
                     }
                 }.onSuccess {
                     onSuccess(chapter)

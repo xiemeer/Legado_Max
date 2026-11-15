@@ -66,7 +66,9 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
         imageUrl: String,
         isHorizontal: Boolean,
         isLastImage: Boolean,
-        transformation: Transformation<Bitmap>?
+        transformation: Transformation<Bitmap>?,
+        localPath: String? = null,
+        directLocal: Boolean = false
     ) {
         mFlProgress.isVisible = true
         mLoading.isVisible = true
@@ -79,6 +81,13 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
         }
         try {
             mImage.tag = imageUrl
+            // 离线直读页：本地文件已落地成绝对路径，直接渲染，
+            // 跳过 getImage/cacheImage 的无效网络尝试（断网时尤其重要）。
+            if (directLocal && !localPath.isNullOrEmpty()) {
+                ProgressManager.removeListener(imageUrl)
+                loadImageFromUri(localPath, isHorizontal, isLastImage, transformation)
+                return
+            }
             val book = ReadManga.book
             if (book != null && !book.isLocal) {
                 // 优先从 BookHelp 文件缓存加载，与文本模式 (ReadBook) 共享同一份图片缓存
@@ -92,6 +101,13 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                     imageLoadJob = CoroutineScope(Dispatchers.Main).launch {
                         if (context is Activity && (context.isDestroyed || context.isFinishing)) {
                             return@launch
+                        }
+                        // 优先把 Download 目录已导出的本地图片导入私有缓存，避免重复网络下载；
+                        // 失败（本地文件缺失/读取异常）则静默降级，继续走网络下载。
+                        if (!localPath.isNullOrEmpty()) {
+                            runCatching {
+                                BookHelp.importLocalImageToCache(book, imageUrl, localPath)
+                            }.onFailure { it.printOnDebug() }
                         }
                         ImageProvider.cacheImage(book, imageUrl, ReadManga.bookSource)
                         if (context is Activity && (context.isDestroyed || context.isFinishing)) {
@@ -180,6 +196,7 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                     }
                     mImage.scaleType = ImageView.ScaleType.FIT_CENTER
                 }
+                // 全章就绪提示已上移到章节级"文件就绪"判定，不再依赖 Glide 渲染与滚动
                 return false
             }
         }).into(mImage)

@@ -11,6 +11,7 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.databinding.ItemChapterListBinding
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -29,6 +30,8 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
     DiffRecyclerAdapter<BookChapter, ItemChapterListBinding>(context) {
 
     val cacheFileNames = hashSetOf<String>()
+    /** 格式化章节名 -> 已导出图片数；由目录 Fragment 整书一次扫描填充，渲染时只读内存表。 */
+    val downloadedChapters = ConcurrentHashMap<String, Int>()
     private val displayTitleMap = ConcurrentHashMap<String, String>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -271,6 +274,8 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
             val cached = callback.isLocalBook
                     || item.isVolume
                     || cacheFileNames.contains(item.getFileName())
+            val downloaded = if (item.isVolume) null
+            else downloadedChapters[BookHelp.formatChapterName(item.title)]
             if (payloads.isEmpty()) {
                 val isCurrentVol = isCurrentVolume(item.index)
                 val textColor = if (isDur || (item.isVolume && isCurrentVol)) {
@@ -321,7 +326,7 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                     ivLocked.gone()
                 }
 
-                upHasCache(binding, isDur, cached)
+                upHasCache(binding, isDur, cached, downloaded)
             } else {
                 // 仅当 displayTitle 与当前文本不同时才赋值, 避免无意义重绘
                 val displayTitle = getDisplayTitle(item)
@@ -329,7 +334,7 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                     tvChapterName.text = displayTitle
                 }
                 tvChapterName.isSingleLine = !AppConfig.tocShowFullChapterName
-                upHasCache(binding, isDur, cached)
+                upHasCache(binding, isDur, cached, downloaded)
             }
         }
     }
@@ -352,15 +357,32 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
         }
     }
 
-    private fun upHasCache(binding: ItemChapterListBinding, isDur: Boolean, cached: Boolean) =
-        binding.apply {
-            ivChecked.setImageResource(R.drawable.ic_outline_cloud_24)
-            ivChecked.visible(!cached)
-            if (isDur) {
+    private fun upHasCache(
+        binding: ItemChapterListBinding,
+        isDur: Boolean,
+        cached: Boolean,
+        downloaded: Int?
+    ) = binding.apply {
+        when {
+            isDur -> {
+                ivChecked.clearColorFilter()
                 ivChecked.setImageResource(R.drawable.ic_check)
                 ivChecked.visible()
             }
+            // 独立「已下载」标记：与云朵(未缓存)、对勾(当前章)、无图标(已缓存正文)区分
+            downloaded != null && downloaded > 0 -> {
+                ivChecked.setImageResource(R.drawable.ic_download_line)
+                ivChecked.setColorFilter(context.getCompatColor(R.color.secondaryText))
+                ivChecked.visible()
+            }
+            cached -> ivChecked.gone()
+            else -> {
+                ivChecked.clearColorFilter()
+                ivChecked.setImageResource(R.drawable.ic_outline_cloud_24)
+                ivChecked.visible()
+            }
         }
+    }
 
     interface Callback {
         val scope: CoroutineScope

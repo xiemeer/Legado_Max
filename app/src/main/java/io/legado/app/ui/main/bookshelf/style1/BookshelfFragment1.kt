@@ -399,6 +399,16 @@ class BookshelfFragment1() :
         fragmentMap[groupId]?.gotoTop()
     }
 
+    /**
+     * 「按标签搜索」关键词变化：已建好的分组页立即应用；
+     * 还没创建的会在 [TabFragmentPageAdapter.getItem] 时带上 [tagSearchKey]。
+     */
+    override fun onTagSearchChanged(key: String?) {
+        childFragmentManager.fragments.forEach { fragment ->
+            if (fragment is BooksFragment) fragment.setSearchKey(key)
+        }
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     override fun observeLiveBus() {
         super.observeLiveBus()
@@ -447,7 +457,12 @@ class BookshelfFragment1() :
             val group = bookGroups[position]
             onlyUpdateRead = group.onlyUpdateRead
             // 主界面重建后待恢复的选中标签：首帧就带上，列表不必先渲染未筛选内容再纠正
-            return BooksFragment(position, group, BookshelfTagSelection.peek(group.groupId))
+            return BooksFragment(
+                position,
+                group,
+                BookshelfTagSelection.peek(group.groupId),
+                tagSearchKey,
+            )
         }
 
         override fun getCount(): Int = bookGroups.size

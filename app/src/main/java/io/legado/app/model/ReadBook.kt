@@ -122,8 +122,24 @@ object ReadBook : CoroutineScope by MainScope() {
             chapterSize
         }
         contentProcessor = ContentProcessor.get(book)
-        durChapterIndex = book.durChapterIndex
-        durChapterPos = book.durChapterPos
+        // 目录可能因为书源更新而变短，上次的进度索引就会越界。越界时 getChapter 返回 null，
+        // loadContent 直接 return，界面停在空白页——用户看到的就是"打开后一直没内容"。
+        // 这里夹回有效范围，并把位置偏移清零（越界章的偏移已无意义）。
+        val bookChapterIndex = book.durChapterIndex
+        if (chapterSize > 0 && bookChapterIndex >= chapterSize) {
+            durChapterIndex = chapterSize - 1
+            durChapterPos = 0
+            AppLog.put(
+                "阅读进度超出目录范围，已回到最后一章：${book.name} " +
+                    "$bookChapterIndex -> ${chapterSize - 1}"
+            )
+        } else if (bookChapterIndex < 0) {
+            durChapterIndex = 0
+            durChapterPos = 0
+        } else {
+            durChapterIndex = bookChapterIndex
+            durChapterPos = book.durChapterPos
+        }
         isLocalBook = book.isLocal
         clearTextChapter()
         lastLayoutNightTheme = AppConfig.isNightTheme

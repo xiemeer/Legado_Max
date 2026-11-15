@@ -53,6 +53,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.Cache
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookLocalCover
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.ui.book.read.config.highlight.HighlightRuleStore
 import io.legado.app.ui.book.read.websearch.SearchEngineHelper
@@ -176,7 +177,8 @@ object Backup {
             "config.xml",
             "videoConfig.xml",
             "homepage.json",
-            CoverGalleryRepository.backupDirName
+            CoverGalleryRepository.backupDirName,
+            BookLocalCover.BACKUP_DIR_NAME
         )
     }
 
@@ -328,6 +330,17 @@ object Backup {
                 .forEach { imageFile ->
                     imageFile.copyTo(File(groupDir, imageFile.name), overwrite = true)
                 }
+        }
+    }
+
+    /** 本地书籍封面：只复制目录内实际存在的图片文件。 */
+    private fun stageBookCovers(rootPath: String) {
+        val files = BookLocalCover.dir.listFiles()
+            ?.filter { it.isFile && it.length() > 0 }
+        if (files.isNullOrEmpty()) return
+        val targetDir = File(rootPath, BookLocalCover.BACKUP_DIR_NAME).createFolderIfNotExist()
+        files.forEach { file ->
+            file.copyTo(File(targetDir, file.name), overwrite = true)
         }
     }
 
@@ -628,6 +641,10 @@ object Backup {
         if (selectedFiles.contains(CoverGalleryRepository.backupDirName)) {
             onProgress?.invoke(BackupInfoHelper.getDisplayName(CoverGalleryRepository.backupDirName))
             stageCoverGallery(backupPath)
+        }
+        if (selectedFiles.contains(BookLocalCover.BACKUP_DIR_NAME)) {
+            onProgress?.invoke(BackupInfoHelper.getDisplayName(BookLocalCover.BACKUP_DIR_NAME))
+            stageBookCovers(backupPath)
         }
 
         // 服务器配置需要加密存储

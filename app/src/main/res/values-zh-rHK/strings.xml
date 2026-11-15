@@ -62,8 +62,6 @@
     <string name="book_source">書源</string>
     <string name="book_source_manage">書源管理</string>
     <string name="book_source_manage_desc">新建/導入/編輯/管理書源</string>
-    <string name="rss_source_manage">訂閲源管理</string>
-    <string name="rss_source_manage_desc">新建/導入/編輯/管理訂閲源</string>
     <string name="setting">設定</string>
     <string name="theme_setting">主題設定</string>
     <string name="theme_setting_s">同主題/顏色相關的一些設定</string>
@@ -223,7 +221,6 @@
     <string name="replace_rule_invalid">替換規則為空或不滿足正則表達式要求</string>
     <string name="select_action">選擇操作</string>
     <string name="select_all">全選</string>
-    <string name="multi_select_count">已選擇 %1$d</string>
     <string name="select_all_count">全選 (%1$d/%2$d)</string>
     <string name="select_cancel_count">取消全選 (%1$d/%2$d)</string>
     <string name="dark_theme">深色模式</string>
@@ -1174,11 +1171,6 @@
     <string name="check_selected_interval">选中所选区间</string>
     <string name="show_add_to_shelf_alert_title">返回时提示放入书架</string>
     <string name="show_add_to_shelf_alert_summary">阅读未放入书架的书籍在返回时提示放入书架</string>
-    <string name="auto_add_shelf_title">按阅读时长自动加入书架</string>
-    <string name="auto_add_shelf_summary">读到设定的时长后自动把该书加入书架，加入后即停止计时</string>
-    <string name="auto_add_shelf_min_title">阅读时长（分钟）</string>
-    <string name="auto_add_shelf_min_summary">累计读到该时长后自动加入书架，至少 1 分钟</string>
-    <string name="auto_add_shelf_toast">已自动加入书架</string>
     <string name="review">段评</string>
     <string name="rule_review_url">段评URL（reviewUrl）</string>
     <string name="rule_avatar">段评发布者头像（avatarRule）</string>

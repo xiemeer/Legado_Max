@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/shape_card_view"
+        android:orientation="vertical"
+        tools:ignore="UselessParent">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/tool_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/background_menu"
+            android:elevation="5dp"
+            android:theme="?attr/actionBarStyle"
+            app:displayHomeAsUp="false"
+            app:fitStatusBar="false"
+            app:title="@string/batch_change_url"
+            app:popupTheme="@style/AppTheme.PopupOverlay"
+            app:titleTextAppearance="@style/ToolbarTitle" />
+
+        <io.legado.app.ui.widget.text.AccentTextView
+            android:id="@+id/tv_tip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="3dp"
+            tools:text="已选 12 本书 → 目标书源：漫画源 A" />
+
+        <io.legado.app.ui.widget.text.AccentTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="3dp"
+            android:text="@string/batch_change_url_warning" />
+
+        <RadioGroup
+            android:id="@+id/rg_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="11dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <io.legado.app.lib.theme.view.ThemeRadioNoButton
+                android:id="@+id/rb_origin_only"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:layout_weight="1"
+                android:button="@null"
+                android:checked="true"
+                android:gravity="center"
+                android:padding="5dp"
+                android:singleLine="true"
+                android:text="@string/batch_change_url_origin_only" />
+
+            <io.legado.app.lib.theme.view.ThemeRadioNoButton
+                android:id="@+id/rb_replace_url"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:layout_weight="1"
+                android:button="@null"
+                android:gravity="center"
+                android:padding="5dp"
+                android:singleLine="true"
+                android:text="@string/batch_change_url_replace_url" />
+
+        </RadioGroup>
+
+        <LinearLayout
+            android:id="@+id/ll_prefix"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <io.legado.app.ui.widget.text.AccentTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="3dp"
+                android:text="@string/batch_change_url_old_prefix_label" />
+
+            <io.legado.app.lib.theme.view.ThemeEditText
+                android:id="@+id/et_old_prefix"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/batch_change_url_old_prefix_hint"
+                android:inputType="textUri"
+                tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
+
+            <io.legado.app.ui.widget.text.AccentTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="3dp"
+                android:text="@string/batch_change_url_new_prefix_label" />
+
+            <io.legado.app.lib.theme.view.ThemeEditText
+                android:id="@+id/et_new_prefix"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/batch_change_url_new_prefix_hint"
+                android:inputType="textUri"
+                tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
+
+            <io.legado.app.ui.widget.text.AccentTextView
+                android:id="@+id/tv_preview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="3dp"
+                tools:text="示例：https://old.com/a/1 → https://new.com/a/1" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_cancel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:padding="12dp"
+                android:text="@string/cancel"
+                tools:ignore="RtlHardcoded" />
+
+            <TextView
+                android:id="@+id/tv_ok"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:padding="12dp"
+                android:text="@string/ok"
+                tools:ignore="RtlHardcoded" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

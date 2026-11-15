@@ -1,51 +1,44 @@
 pluginManagement {
     repositories {
-        google {
+        maven {
+            url 'https://maven.aliyun.com/repository/google'
             content {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
             }
         }
-        //原仓库
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        // 源仓库回退（镜像缺失时才会用到，可能较慢/被墙）
         gradlePluginPortal()
         mavenCentral()
-        //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
-        //maven { url "https://maven-central-asia.storage-download.googleapis.com/maven2/" }
-        //maven { url 'https://maven.aliyun.com/repository/google' }
-        //maven { url 'https://maven.aliyun.com/repository/public' }
-        //maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-        //maven { url 'https://repo.huaweicloud.com/repository/maven/' }
     }
 }
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+    // Foojay 自动下载 JDK 工具链已移除：本机构建直接指定 JDK17，避免联网拉取工具链
 }
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        //原仓库
-        google {
+        maven {
+            url 'https://maven.aliyun.com/repository/google'
             content {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         maven {
             url = 'https://jitpack.io'
             content {
                 includeGroupByRegex("com\\.github.*")
             }
         }
+        // 源仓库回退（镜像缺失时才会用到，可能较慢/被墙）
         mavenCentral()
-
-        //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
-        //maven { url "https://maven-central-asia.storage-download.googleapis.com/maven2/" }
-        //maven { url 'https://maven.aliyun.com/repository/google' }
-        //maven { url 'https://maven.aliyun.com/repository/public' }
-        //maven { url 'https://repo.huaweicloud.com/repository/maven/' }
     }
 }
 rootProject.name = 'legado'

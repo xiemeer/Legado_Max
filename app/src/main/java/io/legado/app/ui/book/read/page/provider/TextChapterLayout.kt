@@ -20,9 +20,7 @@ import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookContent
-import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ChapterTitleSplitter
-import io.legado.app.help.book.getBookSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -209,10 +207,6 @@ class TextChapterLayout(
             start = CoroutineStart.LAZY,
             executeContext = IO,
         ) {
-            launch {
-                val bookSource = book.getBookSource() ?: return@launch
-                BookHelp.saveImages(bookSource, book, bookChapter, bookContent.toString())
-            }
             getTextChapter(book, bookChapter, displayTitle, bookContent)
         }.onError {
             exception = it

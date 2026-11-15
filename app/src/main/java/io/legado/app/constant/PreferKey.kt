@@ -209,8 +209,6 @@ object PreferKey {
     /** 按键翻页动画速度(毫秒) */
     const val keyPageAnimSpeed = "keyPageAnimSpeed"
     const val showAddToShelfAlert = "showAddToShelfAlert"
-    const val autoAddShelfEnabled = "autoAddShelfEnabled"
-    const val autoAddShelfMinMinutes = "autoAddShelfMinMinutes"
     const val ignoreAudioFocus = "ignoreAudioFocus"
     const val parallelExportBook = "parallelExportBook"
     const val progressBarBehavior = "progressBarBehavior"
@@ -270,15 +268,6 @@ object PreferKey {
     const val dNThemeName = "durThemeNameNight"
     const val topBarPackageDay = "topBarPackageDay"
     const val topBarPackageNight = "topBarPackageNight"
-
-    /**
-     * 主题管理系列页（主题列表/底栏管理/顶栏管理）共用的日/夜 Tab 状态。
-     *
-     * 此前各页各用私有键（navBarIsNight/topBarIsNight）且只在 onCreate 读一次，
-     * 表现为「在一个页面切到夜间，进入另一个页面又回到日间」。改为单一键后
-     * 三页共用同一份用户选择；键不存在时以当前主题的日夜为初值。
-     */
-    const val manageIsNight = "themeManageIsNight"
 
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"

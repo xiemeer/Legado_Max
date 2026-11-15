@@ -70,8 +70,6 @@
     <string name="book_source">书源</string>
     <string name="book_source_manage">书源管理</string>
     <string name="book_source_manage_desc">新建、导入、编辑或管理书源</string>
-    <string name="rss_source_manage">订阅源管理</string>
-    <string name="rss_source_manage_desc">新建、导入、编辑或管理订阅源</string>
     <string name="setting">设置</string>
     <string name="theme_setting">主题设置</string>
     <string name="theme_setting_s">与界面/颜色相关的一些设置</string>
@@ -242,7 +240,6 @@
     <string name="replace_rule_invalid">替换规则为空或者不满足正则表达式要求</string>
     <string name="select_action">选择操作</string>
     <string name="select_all">全选</string>
-    <string name="multi_select_count">已选择 %1$d</string>
     <string name="selected">已选择 %1$d</string>
     <string name="select_all_count">全选（%1$d/%2$d）</string>
     <string name="select_cancel_count">取消全选（%1$d/%2$d）</string>
@@ -1154,6 +1151,7 @@
     <string name="use_zh_layout">使用自定义中文分行</string>
     <string name="allow_punct_at_line_start">标点允许出现在行首</string>
     <string name="image_style">图片样式</string>
+    <string name="export_chapter_images">导出本章图片</string>
     <string name="system_tts">系统 TTS</string>
     <string name="export_type">导出格式</string>
     <string name="checkAuthor">校验作者</string>
@@ -1350,6 +1348,27 @@
     <string name="bookmark_search_book_text">原文</string>
     <string name="bookmark_search_content">笔记/摘要</string>
     <string name="change_source_batch">批量换源</string>
+    <string name="batch_change_url">批量改地址</string>
+    <string name="batch_change_url_no_selection">请先选择要改地址的书籍</string>
+    <string name="batch_change_url_tip">已选 %1$d 本书 → 目标书源：%2$s</string>
+    <string name="batch_change_url_warning">不搜索、不校验目标站是否存在这本书。请确保新书源能解析现有的目录地址；操作不可撤销，建议先备份书架。</string>
+    <string name="batch_change_url_origin_only">只换书源归属</string>
+    <string name="batch_change_url_replace_url">连网址一起换</string>
+    <string name="batch_change_url_old_prefix_label">旧地址前缀</string>
+    <string name="batch_change_url_old_prefix_hint">例如 https://old.com</string>
+    <string name="batch_change_url_new_prefix_label">新地址前缀</string>
+    <string name="batch_change_url_new_prefix_hint">例如 https://new.com</string>
+    <string name="batch_change_url_preview">示例：%1$s → %2$s</string>
+    <string name="batch_change_url_preview_none">示例：当前书籍网址不匹配旧前缀，这本书会被跳过</string>
+    <string name="batch_change_url_need_prefix">请填写旧地址前缀和新地址前缀</string>
+    <string name="batch_change_url_result">改地址完成：成功 %1$d 本，跳过 %2$d 本，失败 %3$d 本</string>
+    <string name="change_source_picker_title_all">选择书源</string>
+    <string name="change_source_picker_title_text">选择文本书源</string>
+    <string name="change_source_picker_title_image">选择图片书源</string>
+    <string name="change_source_picker_title_audio">选择音频书源</string>
+    <string name="change_source_process">%1$d / %2$d  %3$s</string>
+    <string name="change_source_result">换源完成：成功 %1$d 本，未找到 %2$d 本，失败 %3$d 本，跳过 %4$d 本</string>
+    <string name="change_source_no_selection">请先选择要换源的书籍</string>
     <string name="book_type_different">书籍类型不一样</string>
     <string name="soure_change_source">是否确认换源</string>
     <string name="input_verification_code">输入验证码</string>
@@ -1398,11 +1417,6 @@
     <string name="check_selected_interval">选中所选区间</string>
     <string name="show_add_to_shelf_alert_title">返回时提示放入书架</string>
     <string name="show_add_to_shelf_alert_summary">阅读未放入书架的书籍在返回时提示放入书架</string>
-    <string name="auto_add_shelf_title">按阅读时长自动加入书架</string>
-    <string name="auto_add_shelf_summary">读到设定时长后自动把该书加入书架，加入后即停止计时</string>
-    <string name="auto_add_shelf_min_title">阅读时长（分钟）</string>
-    <string name="auto_add_shelf_min_summary">累计读到该时长后自动加入书架，至少 1 分钟</string>
-    <string name="auto_add_shelf_toast">已自动加入书架</string>
     <string name="review">段评</string>
     <string name="rule_review_url">段评URL（reviewUrl）</string>
     <string name="rule_avatar">段评发布者头像（avatarRule）</string>
@@ -2710,4 +2724,33 @@
     <string name="backup_encrypt_s">仅对上传到 WebDAV 的备份包使用 AES-GCM 加密，需先设置备份密码</string>
     <string name="backup_keep_count_t">保留最近备份数</string>
     <string name="fvd_manifest_summary">%1$s · %2$s · %3$d 项</string>
+    <!-- 视频播放器控制（R4/R5） -->
+    <string name="video_prev_episode">上一集</string>
+    <string name="video_double_tap_forward">快进 %1$d 秒</string>
+    <string name="video_double_tap_backward">快退 %1$d 秒</string>
+    <string name="video_double_tap_pause">已暂停</string>
+    <string name="video_double_tap_resume">继续播放</string>
+    <!-- 所有文件访问权限引导（首次启动） -->
+    <string name="all_files_access_title">开启「所有文件访问权限」</string>
+    <string name="all_files_access_message">阅读器需要读取 Download 目录下已下载的漫画图片与导出文件。若未授予「所有文件访问权限」，重装后已下载的内容将无法识别。也可以稍后在系统设置中开启。</string>
+    <string name="all_files_access_go">去开启</string>
+    <string name="all_files_access_later">以后再说</string>
+    <!-- 书架：按标签搜索 -->
+    <string name="bookshelf_tag_search">按标签搜索</string>
+    <string name="bookshelf_tag_search_hint">输入标签、书名或作者，多个关键词用空格分隔</string>
+    <string name="bookshelf_tag_search_result">匹配到 %1$d 本书</string>
+    <!-- 书架管理：批量设置标签 -->
+    <string name="batch_set_tag">批量设置标签</string>
+    <string name="batch_tag_add">添加</string>
+    <string name="batch_tag_remove">移除</string>
+    <string name="batch_tag_tip">已选 %1$d 本书，标签将应用到全部选中书籍</string>
+    <string name="batch_tag_option">%1$s（%2$d/%3$d）</string>
+    <string name="batch_tag_empty">请先选择至少一个标签</string>
+    <string name="batch_tag_result">已更新 %1$d 本书的标签</string>
+    <string name="bookshelf_manage_search_hint">筛选标签 / 书名 / 作者 • %1$s</string>
+    <string name="batch_save_cover">批量保存封面</string>
+    <string name="batch_save_cover_no_selection">请先选择要保存封面的书籍</string>
+    <string name="batch_save_cover_confirm">将把选中书籍的网络封面下载到本机，之后离线也能显示，并会随备份一起保存。已设置自定义封面的书会跳过；重复执行会覆盖更新。</string>
+    <string name="batch_save_cover_process">正在保存封面 %1$d/%2$d：《%3$s》</string>
+    <string name="batch_save_cover_result">封面保存完成：成功 %1$d 本，跳过 %2$d 本，失败 %3$d 本</string>
 </resources>

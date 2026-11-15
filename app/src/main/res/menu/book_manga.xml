@@ -94,6 +94,11 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_export_chapter_images"
+        android:title="@string/export_chapter_images"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_manga_footer_config"
         android:title="@string/manga_footer_config"
         app:showAsAction="never" />

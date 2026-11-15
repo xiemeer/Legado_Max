@@ -191,9 +191,12 @@ android {
     // ABI 分拆仅用于 Release 发布产物；Debug 本地构建保持单一 universal 包，
     // 避免按 armeabi-v7a/arm64-v8a/universal 重复打包拖慢日常构建。
     // 配置缓存已关闭（gradle.properties: unsafe.configuration-cache=false），读取任务名安全。
-    def enableAbiSplits = gradle.startParameter.taskNames.any {
-        it.toLowerCase().contains('release')
-    }
+    // -PuniversalOnly: 只出 universal 单包，跳过 armeabi-v7a / arm64-v8a 分包。
+    // 默认行为不变：任务名含 release 时启用 ABI 分包。
+    def enableAbiSplits = !project.hasProperty('universalOnly') &&
+            gradle.startParameter.taskNames.any {
+                it.toLowerCase().contains('release')
+            }
     logger.lifecycle("ABI splits enabled: {} (tasks: {})", enableAbiSplits, gradle.startParameter.taskNames)
     splits {
         abi {

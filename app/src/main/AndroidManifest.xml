@@ -248,24 +248,24 @@
             android:configChanges="uiMode"
             android:launchMode="standard" />
         <activity
-            android:name=".ui.config.navigationbar.NavigationBarManageActivity"
+            android:name=".ui.config.NavigationBarManageActivity"
             android:launchMode="standard" />
         <activity
             android:name=".ui.config.theme.manage.ThemeManageActivity"
             android:configChanges="uiMode"
             android:launchMode="standard" />
         <activity
-            android:name=".ui.config.theme.application.ApplicationThemeActivity"
+            android:name=".ui.config.theme.legacy.appTheme.ApplicationThemeActivity"
             android:launchMode="standard" />
         <activity
-            android:name=".ui.config.theme.application.edit.ApplicationThemeEditActivity"
+            android:name=".ui.config.theme.legacy.appTheme.ApplicationThemeEditActivity"
             android:launchMode="standard" />
         <activity
-            android:name=".ui.config.topbar.TopBarManageActivity"
+            android:name=".ui.config.TopBarManageActivity"
             android:launchMode="standard" />
         <!-- 搜索界面 -->
         <activity
-            android:name=".ui.config.bubble.BubbleManageActivity"
+            android:name=".ui.config.BubbleManageActivity"
             android:launchMode="standard" />
         <activity
             android:name=".ui.config.ShareNoteTemplateManageActivity"
@@ -721,11 +721,6 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
-        </intent>
-        <!-- 分享配置 JSON 时先探测有没有第三方接收方（见 Context.share） -->
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="*/*" />
         </intent>
     </queries>
 

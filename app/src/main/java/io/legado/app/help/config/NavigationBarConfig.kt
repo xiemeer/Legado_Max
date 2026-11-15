@@ -29,13 +29,10 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.SvgUtils
 import io.legado.app.utils.defaultSharedPreferences
-import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.postEvent
 import splitties.init.appCtx
-import java.io.File
 
 /**
  * 底栏导航栏配置数据类。
@@ -277,25 +274,6 @@ data class NavigationBarConfig(
             return configs
         }
 
-        /**
-         * 将指定配置在所在日/夜分组内置顶。
-         *
-         * 存储顺序即列表顺序（内置项恒在数组最前、不落盘），因此把目标项移到
-         * 自定义项首位再整体保存即可；同时刷新 `updatedAt`，让摘要里的时间跟随变化。
-         */
-        fun toTop(context: Context, config: NavigationBarConfig) {
-            if (config.isBuiltin) return
-            val configs = loadConfigs(context)
-            val index = configs.indexOfFirst { it.id == config.id }
-            if (index < 0) return
-            val target = configs.removeAt(index).copy(updatedAt = System.currentTimeMillis())
-            val insertAt = configs.indexOfFirst { !it.isBuiltin && it.isNight == target.isNight }
-                .takeIf { it >= 0 }
-                ?: configs.indexOfLast { it.isBuiltin }.plus(1)
-            configs.add(insertAt, target)
-            saveConfigs(context, configs)
-        }
-
         /** 保存用户自定义配置到 SharedPreferences（内置配置不入库） */
         fun saveConfigs(context: Context, configs: List<NavigationBarConfig>) {
             context.defaultSharedPreferences.edit(commit = true) {
@@ -460,18 +438,9 @@ data class NavigationBarConfig(
          *
          * SVG 用 [SvgUtils] 解析（[Drawable.createFromPath] 不支持 SVG）；
          * 位图图标用 [Drawable.createFromPath] 原样解码后缓存。
-         *
-         * 图标路径是配置文件里的绝对路径，备份恢复（尤其跨包名/跨设备）后可能指向
-         * 其它应用的外部目录或已删掉的文件，读取会抛 EACCES/ENOENT。这里整体兜住：
-         * 读不到就当没有自定义图标，由调用方回退到内置图标——不能让异常冒到
-         * Activity resume（曾经因为一张 svg 直接崩主界面）。
          */
         private fun loadIconDrawable(context: Context, path: String?): Drawable? {
             if (path.isNullOrBlank()) return null
-            return runCatching { decodeIconDrawable(context, path) }.getOrNull()
-        }
-
-        private fun decodeIconDrawable(context: Context, path: String): Drawable? {
             val cacheKey = iconCacheKey(path)
             synchronized(iconDrawableCache) {
                 iconDrawableCache[cacheKey]?.let { return it }
@@ -489,43 +458,6 @@ data class NavigationBarConfig(
                     }
             }
             return bitmap?.let { drawableOf(cacheKey, it) }
-        }
-
-        /**
-         * 修正自定义图标的保存路径（备份恢复后调用）。
-         *
-         * 图标在配置里存的是绝对路径，跨包名恢复后它仍指向原包名的
-         * `Android/data/<旧包名>/files/navigationBarIcons/...`，当前进程读不了（EACCES）。
-         * 这里按"当前应用图标目录下有没有同名文件"重新定位：
-         * 能找到就改成当前路径，找不到就丢掉这条图标（底栏回退内置图标），
-         * 避免留下一条永远读不了的坏路径。
-         *
-         * @return 是否有路径被改写
-         */
-        fun repairIconPaths(context: Context): Boolean {
-            val configs = loadConfigs(context)
-            var changed = false
-            configs.forEach { config ->
-                if (config.icons.isEmpty()) return@forEach
-                val iconDir = context.externalFiles.getFile("navigationBarIcons", config.id)
-                val repaired = config.icons.mapNotNull { (key, path) ->
-                    val localFile = File(iconDir, File(path).name)
-                    when {
-                        localFile.canRead() -> key to localFile.absolutePath
-                        File(path).canRead() -> key to path
-                        else -> null
-                    }
-                }.toMap()
-                if (repaired != config.icons) {
-                    config.icons = repaired
-                    changed = true
-                }
-            }
-            if (changed) {
-                saveConfigs(context, configs)
-                clearIconCache()
-            }
-            return changed
         }
 
         /**

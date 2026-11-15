@@ -30,6 +30,7 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.BookshelfTagSearch
 import io.legado.app.ui.main.bookshelf.BookshelfTagSelection
 import io.legado.app.ui.main.bookshelf.loadBookshelfTagBarData
 import io.legado.app.ui.main.bookshelf.observeBookshelfTagSource
@@ -85,6 +86,9 @@ class BookshelfFragment2() :
     override var onlyUpdateRead = false
     private var enableRefresh = true
     private var tagFilter: String? = null
+
+    /** 「按标签搜索」的关键词（已拆分）；空 = 不做关键词过滤 */
+    private var searchKeywords: List<String> = emptyList()
     private var tagBar: RoundedTagBarView? = null
     private var tagSelectedIndex = -1
     private var currentTagList: List<String> = emptyList()
@@ -425,16 +429,29 @@ class BookshelfFragment2() :
     }
 
     private fun filterShelfByTag(list: List<BookShelfDisplay>): List<BookShelfDisplay> {
-        val filterTag = tagFilter ?: return list
-        val smartRules = BookTagMatcher.enabledRules(requireContext())
-        return list.filter {
-            BookTagMatcher.matches(
+        val filterTag = tagFilter
+        val keywords = searchKeywords
+        // 两个条件都为空时直接返回，省掉逐本解析标签
+        if (filterTag == null && keywords.isEmpty()) return list
+        val smartRules = if (filterTag != null) BookTagMatcher.enabledRules(requireContext()) else emptyList()
+        return list.filter { display ->
+            val tagHit = filterTag == null || BookTagMatcher.matches(
                 filterTag,
-                it.customTag,
-                it.toSmartTagSnapshot(),
+                display.customTag,
+                display.toSmartTagSnapshot(),
                 smartRules,
             )
+            // 标签栏筛选与关键词搜索是「与」关系
+            tagHit && BookshelfTagSearch.matches(display, keywords)
         }
+    }
+
+    /** 「按标签搜索」关键词变化：重启数据流即可，列表会在 collect 里重新过滤 */
+    override fun onTagSearchChanged(key: String?) {
+        val keywords = BookshelfTagSearch.parse(key)
+        if (keywords == searchKeywords) return
+        searchKeywords = keywords
+        restartBooksFlow()
     }
 
     override fun observeLiveBus() {

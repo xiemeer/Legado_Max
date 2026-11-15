@@ -14,6 +14,7 @@ import okhttp3.ConnectionSpec
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.Credentials
+import okhttp3.Dispatcher
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
@@ -59,6 +60,17 @@ val okHttpClient: OkHttpClient by lazy {
     )
 
     val builder = OkHttpClient.Builder()
+        // OkHttp 默认 Dispatcher 为 maxRequests=64 / maxRequestsPerHost=5。
+        // 漫画图片集中在同一 CDN 域名下，默认值意味着"无论上层把并发数调到多少，
+        // 同一时刻真正在传输的请求永远只有 5 个"，这正是并发率调大却不见变快的原因。
+        // 这里显式放宽：单域名 32 并发、全局 128，让导出/缓存/阅读的图片下载真正并行。
+        // okHttpClientManga 通过 newBuilder() 复用同一 Dispatcher，因此阅读器同步受益。
+        .dispatcher(
+            Dispatcher().apply {
+                maxRequests = 128
+                maxRequestsPerHost = 32
+            }
+        )
         .connectTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)

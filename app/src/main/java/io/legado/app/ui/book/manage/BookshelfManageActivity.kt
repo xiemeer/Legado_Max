@@ -15,12 +15,13 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookSourceType
+import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityArrangeBookBinding
-import io.legado.app.help.book.contains
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
@@ -32,6 +33,7 @@ import io.legado.app.ui.book.group.GroupManageDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.main.bookshelf.BookshelfTagSearch
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -45,6 +47,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -65,7 +68,9 @@ class BookshelfManageActivity :
     SelectActionBar.CallBack,
     BookAdapter.CallBack,
     SourcePickerDialog.Callback,
-    GroupSelectDialog.CallBack {
+    GroupSelectDialog.CallBack,
+    BatchTagDialog.Callback,
+    BatchChangeUrlDialog.Callback {
 
     override val binding by viewBinding(ActivityArrangeBookBinding::inflate)
     override val viewModel by viewModels<BookshelfManageViewModel>()
@@ -119,6 +124,17 @@ class BookshelfManageActivity :
         viewModel.batchChangeSourceProcessLiveData.observe(this) {
             waitDialog.setText(it)
         }
+        viewModel.batchSaveCoverState.observe(this) {
+            if (it) {
+                waitDialog.setText(R.string.batch_save_cover)
+                waitDialog.show()
+            } else {
+                waitDialog.dismiss()
+            }
+        }
+        viewModel.batchSaveCoverProcessLiveData.observe(this) {
+            waitDialog.setText(it)
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -147,7 +163,10 @@ class BookshelfManageActivity :
     }
 
     private fun upTitle() {
-        searchView.queryHint = getString(R.string.screen) + " • " + viewModel.groupName
+        searchView.queryHint = getString(
+            R.string.bookshelf_manage_search_hint,
+            viewModel.groupName.orEmpty()
+        )
     }
 
     private fun initSearchView() {
@@ -242,15 +261,12 @@ class BookshelfManageActivity :
 
     private fun upBookData() {
         books?.let { books ->
-            val searchKey = searchView.query
-            if (searchKey.isNullOrEmpty()) {
+            // 关键词只解析一次，逐本过滤时不必每本书再拆一遍
+            val keywords = BookshelfTagSearch.parse(searchView.query?.toString())
+            if (keywords.isEmpty()) {
                 adapter.setItems(books)
             } else {
-                books.filter {
-                    it.contains(searchKey.toString())
-                }.let {
-                    adapter.setItems(it)
-                }
+                adapter.setItems(books.filter { BookshelfTagSearch.matches(it, keywords) })
             }
         }
     }
@@ -296,11 +312,38 @@ class BookshelfManageActivity :
 
             R.id.menu_add_to_group -> selectGroup(addToGroupRequestCode, 0)
             R.id.menu_remove_to_group -> selectGroup(removeToGroupRequestCode, 0)
-            R.id.menu_change_source -> showDialogFragment<SourcePickerDialog>()
+            R.id.menu_set_tags -> showBatchTagDialog()
+            R.id.menu_change_source -> showChangeSourcePicker()
+            R.id.menu_change_url -> showChangeSourcePicker(forUrlChange = true)
+            R.id.menu_save_cover -> confirmSaveCovers()
             R.id.menu_clear_cache -> viewModel.clearCache(adapter.selection)
             R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
         }
         return false
+    }
+
+    /**
+     * 打开批量设置标签对话框。
+     *
+     * 只把选中书籍的 URL 传进对话框：候选标签与命中数量在对话框内一次性查库算出，
+     * 避免把整份 Book 列表塞进 Bundle（几百本书会超出事务大小限制）。
+     */
+    private fun showBatchTagDialog() {
+        val selection = adapter.selection
+        if (selection.isEmpty()) return
+        showDialogFragment(BatchTagDialog(selection.map { it.bookUrl }))
+    }
+
+    /**
+     * 对话框确认后的批量写入。
+     *
+     * 按 URL 回查选中集再交给 ViewModel：对话框关闭到回调之间选中集合理论上可能被刷新，
+     * 用 URL 求交比直接信任下标更稳。
+     */
+    override fun applyBatchTags(bookUrls: List<String>, tags: List<String>, add: Boolean) {
+        val urlSet = bookUrls.toHashSet()
+        val books = adapter.selection.filter { it.bookUrl in urlSet }
+        viewModel.updateTags(books, tags, add)
     }
 
     private fun upMenu() {
@@ -315,6 +358,22 @@ class BookshelfManageActivity :
                     bookGroup.groupName.eInkGrayscale(),
                 )
             }
+        }
+    }
+
+    /** 批量保存封面：确认后把选中书籍的网络封面下载到本机。 */
+    private fun confirmSaveCovers() {
+        val books = adapter.selection
+        if (books.isEmpty()) {
+            toastOnUi(getString(R.string.batch_save_cover_no_selection))
+            return
+        }
+        alert(
+            titleResource = R.string.batch_save_cover,
+            messageResource = R.string.batch_save_cover_confirm
+        ) {
+            okButton { viewModel.saveCovers(books) }
+            noButton()
         }
     }
 
@@ -414,9 +473,61 @@ class BookshelfManageActivity :
         }
     }
 
+    /**
+     * 打开批量换源的书源选择器。
+     *
+     * 选择器按所选书籍的类型过滤：图片书只能换图片源，文本同理。类型对不上的源搜索也许能出结果，
+     * 但目录与正文规则不匹配，跑完一遍等于什么都没换。只有混选（很少见）时才不限类型。
+     */
+    private fun showChangeSourcePicker(forUrlChange: Boolean = false) {
+        val selection = adapter.selection
+        if (selection.isEmpty()) {
+            toastOnUi(
+                if (forUrlChange) R.string.batch_change_url_no_selection
+                else R.string.change_source_no_selection
+            )
+            return
+        }
+        val sourceType = when {
+            selection.all { it.type and BookType.image > 0 } -> BookSourceType.image
+            selection.all { it.type and BookType.audio > 0 } -> BookSourceType.audio
+            selection.all { it.type and BookType.text > 0 } -> BookSourceType.default
+            else -> SourcePickerDialog.SOURCE_TYPE_ANY
+        }
+        showDialogFragment(SourcePickerDialog.newInstance(sourceType, forUrlChange))
+    }
+
     override fun sourceOnClick(source: BookSource) {
         viewModel.changeSource(adapter.selection, source)
         viewModel.batchChangeSourceState.value = true
+    }
+
+    /** 「批量改地址」专用通道：选完书源后弹参数对话框，不走搜索式换源。 */
+    override fun onSourcePickedForUrlChange(source: BookSource) {
+        val selection = adapter.selection
+        if (selection.isEmpty()) return
+        showDialogFragment(
+            BatchChangeUrlDialog(
+                bookUrls = selection.map { it.bookUrl },
+                sourceUrl = source.bookSourceUrl,
+                sourceName = source.bookSourceName,
+                sampleUrl = selection.first().bookUrl,
+            )
+        )
+    }
+
+    override fun applyUrlChange(
+        bookUrls: List<String>,
+        sourceUrl: String,
+        replaceBookUrl: Boolean,
+        oldPrefix: String,
+        newPrefix: String,
+    ) {
+        val source = appDb.bookSourceDao.getBookSource(sourceUrl) ?: return
+        // 对话框关闭到回调之间选中集合可能被刷新，按 URL 求交比信任下标稳
+        val urlSet = bookUrls.toHashSet()
+        val books = adapter.selection.filter { it.bookUrl in urlSet }
+        viewModel.changeUrlDirect(books, source, replaceBookUrl, oldPrefix, newPrefix)
     }
 
     override fun onLongPress(position: Int, book: Book) {

@@ -14,6 +14,7 @@ import io.legado.app.data.entities.BookProgress
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
 import io.legado.app.help.book.removeType
@@ -30,6 +31,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
@@ -51,7 +53,9 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             ReadManga.chapterChanged = intent.getBooleanExtra("chapterChanged", false)
             val bookUrl = intent.getStringExtra("bookUrl")
             val book = when {
-                bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
+                // 没带 bookUrl 的兜底必须是「最近读的漫画」：用 lastReadBook 会取到文字书，
+                // 然后拿文字书跑图片排版，章节索引和内容全对不上
+                bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadImageBook
                 else -> appDb.bookDao.getBook(bookUrl)
             } ?: ReadManga.book
             when {
@@ -293,6 +297,39 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                     BookHelp.delContent(book, chapter)
                     openChapter(ReadManga.durChapterIndex, ReadManga.durChapterPos)
                 }
+        }
+    }
+
+    /**
+     * 导出本章图片：取当前漫画章节正文，复用 BookHelp 的图片导出（缓存优先 + 按序改名 + 内容去重），
+     * 导出到 Download/阅读器/<书源名>/<书名>/<章节名>/001.jpg…，并弹 Toast 反馈张数或失败原因。
+     */
+    fun exportChapterImages() {
+        val book = ReadManga.book ?: return
+        val bookSource = ReadManga.bookSource ?: book.getBookSource() ?: run {
+            context.toastOnUi("当前书籍没有可用书源，无法导出图片")
+            return
+        }
+        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadManga.durChapterIndex)
+            ?: run {
+                context.toastOnUi("当前章节尚未加载，请稍候")
+                return
+            }
+        execute {
+            val content = BookHelp.getContent(book, chapter)
+                ?: return@execute -1   // 本章正文尚未缓存
+            val total = BookHelp.flowImages(chapter, content).count()
+            if (total <= 0) return@execute 0
+            BookHelp.saveImages(bookSource, book, chapter, content)
+            total
+        }.onSuccess { total ->
+            when {
+                total < 0 -> context.toastOnUi("本章内容尚未缓存，请先翻看本章")
+                total == 0 -> context.toastOnUi("本章没有图片")
+                else -> context.toastOnUi("已导出本章图片：$total 张\nDownload/阅读器/…")
+            }
+        }.onError {
+            context.toastOnUi("导出失败：${it.localizedMessage}")
         }
     }
 }

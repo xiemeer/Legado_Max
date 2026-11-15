@@ -34,6 +34,7 @@ import io.legado.app.ui.main.bookshelf.compose.BookshelfBookItem
 import io.legado.app.ui.main.bookshelf.compose.BookshelfDisplayConfig
 import io.legado.app.ui.main.bookshelf.compose.buildBookshelfBookItems
 import io.legado.app.ui.main.bookshelf.compose.updateBookshelfBookUpdating
+import io.legado.app.ui.main.bookshelf.BookshelfTagSearch
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
@@ -65,8 +66,14 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
     /**
      * @param initialTag 首帧就要应用的标签筛选。主界面重建后父级会带上待恢复的选中标签，
      *   让列表一开始就按它过滤，避免"先显示全部再被筛掉"那一下闪烁
+     * @param initialSearchKey 首帧就要应用的「按标签搜索」关键词，理由同上
      */
-    constructor(position: Int, group: BookGroup, initialTag: String? = null) : this() {
+    constructor(
+        position: Int,
+        group: BookGroup,
+        initialTag: String? = null,
+        initialSearchKey: String? = null
+    ) : this() {
         val bundle = Bundle()
         bundle.putInt("position", position)
         bundle.putLong("groupId", group.groupId)
@@ -74,6 +81,7 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
         bundle.putBoolean("enableRefresh", group.enableRefresh)
         bundle.putBoolean("onlyUpdateRead", group.onlyUpdateRead)
         bundle.putString("initialTag", initialTag)
+        bundle.putString("initialSearchKey", initialSearchKey)
         arguments = bundle
     }
 
@@ -90,6 +98,9 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
     private var enableRefresh = true
     private var onlyUpdateRead = false
     private var tagFilter: String? = null
+
+    /** 「按标签搜索」的关键词（已拆分）；空 = 不做关键词过滤 */
+    private var searchKeywords: List<String> = emptyList()
 
     /** 当前展示的书籍（已按标签筛选，供目录更新与重新构建条目复用） */
     private var shelfDisplays: List<BookShelfDisplay> = emptyList()
@@ -109,6 +120,10 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
             onlyUpdateRead = it.getBoolean("onlyUpdateRead", false)
             // 首次数据加载前就带上筛选，避免重建后先渲染未筛选列表再纠正
             tagFilter = it.getString("initialTag")
+            // 父页可能在页面还没建视图时就下发过关键词，内存值优先，避免被旧 bundle 覆盖
+            if (searchKeywords.isEmpty()) {
+                searchKeywords = BookshelfTagSearch.parse(it.getString("initialSearchKey"))
+            }
             binding.refreshLayout.isEnabled = enableRefresh
         }
         updateMainBottomPadding((activity as? MainActivity)?.mainContentBottomPadding() ?: 0)
@@ -220,16 +235,37 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
         list: List<BookShelfDisplay>,
         appContext: Context,
     ): List<BookShelfDisplay> {
-        val filterTag = tagFilter ?: return list
-        val smartRules = BookTagMatcher.enabledRules(appContext)
-        return list.filter {
-            BookTagMatcher.matches(
+        val filterTag = tagFilter
+        val keywords = searchKeywords
+        // 两个条件都为空时直接返回，省掉逐本解析标签
+        if (filterTag == null && keywords.isEmpty()) return list
+        // 只有真的按标签筛选时才去读智能标签规则，按标签搜索不必付这份开销
+        val smartRules = if (filterTag != null) BookTagMatcher.enabledRules(appContext) else emptyList()
+        return list.filter { display ->
+            val tagHit = filterTag == null || BookTagMatcher.matches(
                 filterTag,
-                it.customTag,
-                it.toSmartTagSnapshot(),
+                display.customTag,
+                display.toSmartTagSnapshot(),
                 smartRules,
             )
+            // 标签栏筛选与关键词搜索是「与」关系：先过标签，再过关键词
+            tagHit && BookshelfTagSearch.matches(display, keywords)
         }
+    }
+
+    /**
+     * 应用「按标签搜索」的关键词。传 null 表示清除。
+     *
+     * 与 [filterByTag] 同样做去重：父页切分组时会对每个已创建的分组页都调一次，
+     * 关键词没变就不该重查一遍数据库。
+     */
+    fun setSearchKey(key: String?) {
+        val keywords = BookshelfTagSearch.parse(key)
+        if (keywords == searchKeywords) return
+        searchKeywords = keywords
+        // 视图还没建好（页面在 ViewPager 里尚未实例化/已销毁）时只记住新值，
+        // 等 onFragmentCreated 之后的首次数据加载自然带上，避免对空 viewLifecycleOwner 起协程
+        if (view != null) upRecyclerData()
     }
 
     /** 启动"最后更新时间"定时刷新：列表布局下每 30 秒重算一次相对时间 */

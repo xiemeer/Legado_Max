@@ -10,6 +10,13 @@
         android:title="@string/search"
         app:showAsAction="always" />
 
+    <!-- 按标签搜索：用来源标签(kind)/自定义标签/书名/作者过滤当前书架 -->
+    <item
+        android:id="@+id/menu_tag_search"
+        android:icon="@drawable/ic_search"
+        android:title="@string/bookshelf_tag_search"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/menu_update_toc"
         android:icon="@drawable/ic_refresh_black_24dp"

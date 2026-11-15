@@ -72,8 +72,6 @@
     <string name="book_source">Book sources</string>
     <string name="book_source_manage">Sources management</string>
     <string name="book_source_manage_desc">Create/Import/Edit/Manage Book sources</string>
-    <string name="rss_source_manage">RSS source management</string>
-    <string name="rss_source_manage_desc">Create/Import/Edit/Manage RSS sources</string>
     <string name="setting">Settings</string>
     <string name="theme_setting">Theme settings</string>
     <string name="theme_setting_s">Some settings related to interface or color</string>
@@ -245,7 +243,6 @@
     <string name="replace_rule_invalid">Pattern rule is empty or does not conform the regex specification.</string>
     <string name="select_action">Selection action</string>
     <string name="select_all">Select all</string>
-    <string name="multi_select_count">Selected %1$d</string>
     <string name="selected">Selected %1$d</string>
     <string name="select_all_count">Select all(%1$d/%2$d)</string>
     <string name="select_cancel_count">Cancel select all(%1$d/%2$d)</string>
@@ -1156,6 +1153,7 @@
     <string name="use_zh_layout">Custom Chinese line feed</string>
     <string name="allow_punct_at_line_start">Allow punctuation at line start</string>
     <string name="image_style">Style of Images</string>
+    <string name="export_chapter_images">Export chapter images</string>
     <string name="system_tts">System tts</string>
     <string name="export_type">Exported file format</string>
     <string name="checkAuthor">Check by author</string>
@@ -1354,6 +1352,27 @@
     <string name="bookmark_search_book_text">Original text</string>
     <string name="bookmark_search_content">Note/Summary</string>
     <string name="change_source_batch">Batch source switching</string>
+    <string name="batch_change_url">Batch change URLs</string>
+    <string name="batch_change_url_no_selection">Select books first</string>
+    <string name="batch_change_url_tip">%1$d books selected - target source: %2$s</string>
+    <string name="batch_change_url_warning">No search and no validation. Make sure the new source can parse the existing catalog URL. This cannot be undone, so back up your bookshelf first.</string>
+    <string name="batch_change_url_origin_only">Source only</string>
+    <string name="batch_change_url_replace_url">Replace URLs too</string>
+    <string name="batch_change_url_old_prefix_label">Old URL prefix</string>
+    <string name="batch_change_url_old_prefix_hint">e.g. https://old.com</string>
+    <string name="batch_change_url_new_prefix_label">New URL prefix</string>
+    <string name="batch_change_url_new_prefix_hint">e.g. https://new.com</string>
+    <string name="batch_change_url_preview">Sample: %1$s - %2$s</string>
+    <string name="batch_change_url_preview_none">Sample: the current book URL does not match the old prefix, it will be skipped</string>
+    <string name="batch_change_url_need_prefix">Fill in both the old and new URL prefixes</string>
+    <string name="batch_change_url_result">Done: %1$d changed, %2$d skipped, %3$d failed</string>
+    <string name="change_source_picker_title_all">Select book source</string>
+    <string name="change_source_picker_title_text">Select text source</string>
+    <string name="change_source_picker_title_image">Select image source</string>
+    <string name="change_source_picker_title_audio">Select audio source</string>
+    <string name="change_source_process">%1$d / %2$d  %3$s</string>
+    <string name="change_source_result">Source switched: %1$d succeeded, %2$d not found, %3$d failed, %4$d skipped</string>
+    <string name="change_source_no_selection">Select books first</string>
     <string name="book_type_different">Different types of books</string>
     <string name="soure_change_source">Whether to confirm the source change</string>
     <string name="input_verification_code">Enter the CAPTCHA</string>
@@ -1402,11 +1421,6 @@
     <string name="check_source_compose">Check source (New UI)</string>
     <string name="show_add_to_shelf_alert_title">Prompt to add to bookshelf when return</string>
     <string name="show_add_to_shelf_alert_summary">Prompt to add to bookshelf when return from reading books that are not on the bookshelf</string>
-    <string name="auto_add_shelf_title">Auto add to bookshelf by reading time</string>
-    <string name="auto_add_shelf_summary">Add the book to the bookshelf once you have read for the set time, timing stops after it is added</string>
-    <string name="auto_add_shelf_min_title">Reading time (minutes)</string>
-    <string name="auto_add_shelf_min_summary">Add to bookshelf automatically after reading this long, at least 1 minute</string>
-    <string name="auto_add_shelf_toast">Added to bookshelf</string>
     <string name="review">Review</string>
     <string name="rule_avatar">Review Avatar (avatarRule)</string>
     <string name="rule_review_url">Review URL (reviewUrl)</string>
@@ -2726,4 +2740,33 @@ Night: %5$s / %6$s / %7$s / %8$s</string>
     <string name="backup_encrypt_s">AES-GCM applies to the uploaded WebDAV package only; set the backup password first</string>
     <string name="backup_keep_count_t">Keep recent backups</string>
     <string name="fvd_manifest_summary">%1$s · %2$s · %3$d items</string>
+    <!-- Video player controls (R4/R5) -->
+    <string name="video_prev_episode">Previous episode</string>
+    <string name="video_double_tap_forward">Forward %1$d s</string>
+    <string name="video_double_tap_backward">Rewind %1$d s</string>
+    <string name="video_double_tap_pause">Paused</string>
+    <string name="video_double_tap_resume">Playing</string>
+    <!-- 所有文件访问权限引导（首次启动） -->
+    <string name="all_files_access_title">Allow access to all files</string>
+    <string name="all_files_access_message">To read downloaded manga images and exported files under the Download folder, this app needs the \"All files access\" permission. Without it, downloaded content cannot be found after reinstalling. You can grant it later in system settings.</string>
+    <string name="all_files_access_go">Grant now</string>
+    <string name="all_files_access_later">Later</string>
+    <!-- 书架：按标签搜索 -->
+    <string name="bookshelf_tag_search">Search by tag</string>
+    <string name="bookshelf_tag_search_hint">Tag, title or author; separate multiple keywords with spaces</string>
+    <string name="bookshelf_tag_search_result">Matched %1$d books</string>
+    <!-- 书架管理：批量设置标签 -->
+    <string name="batch_set_tag">Batch set tags</string>
+    <string name="batch_tag_add">Add</string>
+    <string name="batch_tag_remove">Remove</string>
+    <string name="batch_tag_tip">%1$d books selected. Tags are applied to all of them.</string>
+    <string name="batch_tag_option">%1$s (%2$d/%3$d)</string>
+    <string name="batch_tag_empty">Select at least one tag first</string>
+    <string name="batch_tag_result">Tags updated for %1$d books</string>
+    <string name="bookshelf_manage_search_hint">Filter by tag, title or author • %1$s</string>
+    <string name="batch_save_cover">Save covers locally</string>
+    <string name="batch_save_cover_no_selection">Select books first</string>
+    <string name="batch_save_cover_confirm">Download the online covers of the selected books to this device, so they display offline and are included in backups. Books with a custom cover are skipped.</string>
+    <string name="batch_save_cover_process">Saving covers %1$d/%2$d: %3$s</string>
+    <string name="batch_save_cover_result">Covers saved: %1$d done, %2$d skipped, %3$d failed</string>
 </resources>

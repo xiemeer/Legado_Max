@@ -278,4 +278,16 @@ by appCtx.getSharedPreferences("local_plus", Context.MODE_PRIVATE) {
             putBoolean("appCrash", value)
         }
 
+    /**
+     * 是否已经引导过「所有文件访问权限」。
+     *
+     * 只需要问一次：卸载重装后 SharedPreferences 一并清空，会重新引导，正是需要它的时机。
+     * 用户选择「以后再说」也记为已引导，避免每次启动都弹；需要时仍可从设置里手动授权。
+     */
+    var allFilesAccessPrompted: Boolean
+        get() = getBoolean("allFilesAccessPrompted", false)
+        set(value) {
+            putBoolean("allFilesAccessPrompted", value)
+        }
+
 }

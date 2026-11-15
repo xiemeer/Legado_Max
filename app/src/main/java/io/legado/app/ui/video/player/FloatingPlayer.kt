@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.Surface
 import android.view.SurfaceView
+import android.view.View
 import android.widget.ImageView
 import androidx.core.view.isInvisible
 import androidx.core.view.isNotEmpty
@@ -12,6 +13,8 @@ import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
 import java.io.File
+import java.lang.ref.WeakReference
+
 
 class FloatingPlayer : StandardGSYVideoPlayer {
     constructor(context: Context, fullFlag: Boolean) : super(context, fullFlag)
@@ -19,6 +22,29 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
     lateinit var fullscreenB: ImageView
+
+    /**
+     * 悬浮窗是长命对象（生命周期挂在 Service 上，可以比任何 Activity 活得久），
+     * 而 gsy 的 `cloneParams()` 会把源播放器的 `mBackFromFullScreenListener`
+     * （通常是 VideoPlayerActivity 的 lambda，捕获了 Activity 自身）一并复制过来。
+     * 长命对象强持有短命对象 = Activity 泄漏，LeakCanary 报的正是这条：
+     * `FloatingPlayer → mBackFromFullScreenListener → VideoPlayerActivity$$ExternalSyntheticLambda`。
+     *
+     * 这里统一用弱引用包装：即使某个调用方忘了显式置空，Activity 也能被正常回收，
+     * 只是点击时回调变为 no-op —— 对小窗来说这是安全降级（它有自己的 fullscreenB 监听）。
+     */
+    override fun setBackFromFullScreenListener(l: View.OnClickListener?) {
+        // 显式置空要真的置空（否则包装器本身还在，语义不对）
+        super.setBackFromFullScreenListener(l?.let { WeakClickListener(it) })
+    }
+
+    private class WeakClickListener(listener: View.OnClickListener?) : View.OnClickListener {
+        private val ref = WeakReference(listener)
+
+        override fun onClick(v: View?) {
+            ref.get()?.onClick(v)
+        }
+    }
 
     override fun init(context: Context?) {
         if (activityContext != null) {
@@ -39,7 +65,9 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         fullscreenB = findViewById(R.id.fullscreenB)
     }
 
-    override fun getLayoutId(): Int = R.layout.video_layout_floating
+    override fun getLayoutId(): Int {
+        return R.layout.video_layout_floating
+    }
 
     override fun setUp(url: String?, cacheWithPlay: Boolean, cachePath: File?, title: String?): Boolean {
         val result = super.setUp(url, cacheWithPlay, cachePath, title)
@@ -48,7 +76,8 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         return result
     }
 
-    override fun onAutoCompletion() { // 自动播放完成
+
+    override fun onAutoCompletion() { //自动播放完成
         setStateAndUi(CURRENT_STATE_AUTO_COMPLETE)
         mSaveChangeViewTIme = 0
         if (mTextureViewContainer.isNotEmpty()) {
@@ -76,9 +105,13 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         releaseNetWorkState()
     }
 
-    override fun getActivityContext(): Context? = context
+    override fun getActivityContext(): Context? {
+        return context
+    }
 
-    override fun isShowNetConfirm(): Boolean = false
+    override fun isShowNetConfirm(): Boolean {
+        return false
+    }
 
     override fun performClick(): Boolean {
         super.performClick()
@@ -86,11 +119,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     }
 
     override fun setProgressAndTime(
-        progress: Long,
-        secProgress: Long,
-        currentTime: Long,
-        totalTime: Long,
-        forceChange: Boolean,
+        progress: Long, secProgress: Long, currentTime: Long, totalTime: Long, forceChange: Boolean
     ) {
         if (mHadSeekTouch) {
             return
@@ -116,16 +145,30 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
     }
-    override fun getCurrentPlayer(): FloatingPlayer = this
+    override fun getCurrentPlayer(): FloatingPlayer {
+        return this
+    }
 
     /**********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现***********/
-    override fun getGSYVideoManager(): ExoVideoManager = VideoPlay.videoManager.apply { initContext(context.applicationContext) }
+    override fun getGSYVideoManager(): ExoVideoManager {
+        return VideoPlay.videoManager.apply { initContext(context.applicationContext) }
+    }
+
+    override fun release() {
+        super.release()
+        // 与 VideoPlayer 同理：gsy 正常销毁不释放网络监听模块，会挂住 Service/Context
+        releaseNetWorkState()
+    }
     override fun releaseVideos() {
         VideoPlay.releaseAllVideos()
     }
-    override fun getFullId(): Int = ExoVideoManager.FULLSCREEN_ID
+    override fun getFullId(): Int {
+        return ExoVideoManager.FULLSCREEN_ID
+    }
 
-    override fun getSmallId(): Int = ExoVideoManager.SMALL_ID
+    override fun getSmallId(): Int {
+        return ExoVideoManager.SMALL_ID
+    }
     override fun setDisplay(surface: Surface?) {
         if (surface != null && mTextureView.getShowView() is SurfaceView) {
             val surfaceView = (mTextureView.getShowView() as SurfaceView?)
@@ -136,11 +179,9 @@ class FloatingPlayer : StandardGSYVideoPlayer {
             gsyVideoManager.setDisplayNew(null)
         }
     }
-    fun nextUI() {
-        resetProgressAndTime()
-    }
+    fun nextUI() { resetProgressAndTime() }
 
-    // 播放器转移
+    //播放器转移
     fun setSurfaceToPlay() {
         addTextureView()
         gsyVideoManager.setListener(this)
@@ -159,7 +200,9 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         }
     }
 
-    fun saveState(): FloatingPlayer = this
+    fun saveState(): FloatingPlayer {
+        return this
+    }
 
     fun cloneState(switchVideo: StandardGSYVideoPlayer) {
         cloneParams(switchVideo, this)

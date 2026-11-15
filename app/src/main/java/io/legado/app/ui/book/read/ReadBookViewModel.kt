@@ -18,6 +18,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
 import io.legado.app.help.book.removeType
@@ -51,6 +52,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onEmpty
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.count
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -71,13 +73,17 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         AppConfig.detectClickArea()
     }
 
-    fun initReadBookConfig(intent: Intent) {
-        val bookUrl = intent.getStringExtra("bookUrl")
-        val book = when {
-            bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
-            else -> appDb.bookDao.getBook(bookUrl)
-        } ?: return
-        ReadBook.upReadBookConfig(book)
+    /**
+     * 初始化阅读配置（漫画/文字排版样式）。
+     *
+     * **不要在主线程调用**：内部要查 books 表，冷启动首次访问 Room 会串行化打开数据库，
+     * 在主线程查会把 Activity 的首帧一起卡住（书架/书源越多、距上次使用越久越明显）。
+     * 现在统一在 [initData] 的 IO 协程里、拿到 book 之后应用，顺序与原来等价
+     * （配置必须在排版之前确定）。
+     */
+    private fun applyReadBookConfig(book: Book) {
+        runCatching { ReadBook.upReadBookConfig(book) }
+            .onFailure { AppLog.put("应用阅读配置出错\n${it.localizedMessage}", it) }
     }
 
     /**
@@ -94,7 +100,12 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 else -> appDb.bookDao.getBook(bookUrl)
             } ?: ReadBook.book
             when {
-                book != null -> initBook(book)
+                book != null -> {
+                    // 排版样式（文字/漫画）必须在 initBook 进入正文之前确定
+                    applyReadBookConfig(book)
+                    initBook(book)
+                }
+
                 else -> {
                     ReadBook.upMsg(context.getString(R.string.no_book))
                     AppLog.put("未找到书籍\nbookUrl:$bookUrl")
@@ -633,6 +644,41 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             }
         }.onFinally {
             ReadBook.loadContent(false)
+        }
+    }
+
+    /**
+     * 手动导出"当前章节"的全部图片到公共 Download 目录：
+     *   Download/阅读器/<书源名>/<书名>/<章节名>/001.jpg …
+     * 优先复用阅读器私有缓存（已看过的图零网络、不会被翻页取消打断）；
+     * 私有缓存缺失的图片按章节正文出现顺序补下载，确保首尾图也不漏。
+     * 点击阅读页右上角"⋮ → 导出本章图片"触发。
+     */
+    fun exportChapterImages() {
+        val book = ReadBook.book ?: return
+        val bookSource = ReadBook.bookSource ?: book.getBookSource() ?: run {
+            context.toastOnUi("当前书籍没有可用书源，无法导出图片")
+            return
+        }
+        val chapter = ReadBook.curTextChapter?.chapter ?: run {
+            context.toastOnUi("当前章节尚未加载，请稍候")
+            return
+        }
+        execute {
+            val content = BookHelp.getContent(book, chapter)
+                ?: return@execute -1   // 本章正文尚未缓存
+            val total = BookHelp.flowImages(chapter, content).count()
+            if (total <= 0) return@execute 0
+            BookHelp.saveImages(bookSource, book, chapter, content)
+            total
+        }.onSuccess { total ->
+            when {
+                total < 0 -> context.toastOnUi("本章内容尚未缓存，请先翻看本章")
+                total == 0 -> context.toastOnUi("本章没有图片")
+                else -> context.toastOnUi("已导出本章图片：$total 张\nDownload/阅读器/…")
+            }
+        }.onError {
+            context.toastOnUi("导出失败：${it.localizedMessage}")
         }
     }
 

@@ -221,6 +221,9 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
                     WebBook.runPreUpdateJs(source, book)
                 }
                 val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
+                // 目录刷新只请求 tocUrl，而封面规则在详情页，常规批量更新永远不会刷新封面。
+                // 单独解析一次详情页，只把 coverUrl 写回，失败不影响本次目录更新结果。
+                refreshCover(source, book)
                 book.sync(oldBook)
                 book.removeType(BookType.updateError)
                 if (book.bookUrl == bookUrl) {
@@ -245,6 +248,42 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         } finally {
             semaphore.release()
             logUpdate("🔓 信号量释放（书源${source.bookSourceName}，书籍《${book.name}》）：允许下一个任务执行", verbose = true)
+        }
+    }
+
+    /**
+     * 批量更新目录时顺带刷新封面。
+     *
+     * 封面来自详情页的 ruleBookInfo.coverUrl（BookInfo.analyzeBookInfo），
+     * 而 updateToc 只有 tocUrl 为空时才会请求详情页，所以绝大多数在架书的封面
+     * 长期不会随批量更新刷新。这里用副本单独走一次详情解析：
+     * - 副本隔离：详情解析会改书名/作者/简介/分类/tocUrl/type，只取 coverUrl 写回；
+     * - 强制网络：清掉 infoHtml 缓存，否则解析的是加书架时的旧页面；
+     * - 单列语义：只改内存中的 coverUrl，由后面的 bookDao.update/replace 一并落库；
+     * - 失败静默：封面拉不到不影响目录更新成功，也不标记 updateError。
+     */
+    private suspend fun refreshCover(source: BookSource, book: Book) {
+        // 用户自定义封面优先展示，刷新 coverUrl 看不到效果，跳过省一次请求。
+        if (!book.customCoverUrl.isNullOrBlank()) return
+        // 书源没配封面规则，请求详情页也解析不出封面。
+        if (source.getBookInfoRule().coverUrl.isNullOrBlank()) return
+        kotlin.runCatching {
+            val probe = book.copy().apply {
+                infoHtml = null
+            }
+            WebBook.getBookInfoAwait(source, probe, canReName = false)
+            val newCover = probe.coverUrl
+            if (!newCover.isNullOrBlank() && newCover != book.coverUrl) {
+                book.coverUrl = newCover
+                logUpdate("🖼️ 封面已更新《${book.name}》", verbose = true)
+            }
+        }.onFailure {
+            // 协程取消要正常传播，不能当成普通失败吞掉。
+            currentCoroutineContext().ensureActive()
+            logUpdate(
+                "⚠️ 封面更新失败《${book.name}》：${it.localizedMessage}",
+                verbose = true
+            )
         }
     }
 

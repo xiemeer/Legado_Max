@@ -13,6 +13,7 @@ import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.appDb
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookLocalCover
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.getFolderNameNoCache
 import io.legado.app.help.book.isEpub
@@ -168,7 +169,9 @@ data class Book(
 
     fun getUnreadChapterNum() = max(simulatedTotalChapterNum() - durChapterIndex - 1, 0)
 
-    fun getDisplayCover() = if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl
+    fun getDisplayCover() = BookLocalCover.resolve(
+        if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl
+    )
 
     fun getDisplayIntro() = if (customIntro.isNullOrEmpty()) intro else customIntro
 

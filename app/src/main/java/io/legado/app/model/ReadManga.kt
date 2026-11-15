@@ -27,20 +27,23 @@ import io.legado.app.ui.book.manga.entities.MangaContent
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
 import io.legado.app.utils.mapIndexed
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
 import kotlin.math.min
+import java.util.concurrent.ConcurrentHashMap
 //漫画阅读模型
 @Suppress("MemberVisibilityCanBePrivate")
 object ReadManga : CoroutineScope by MainScope() {
@@ -64,6 +67,11 @@ object ReadManga : CoroutineScope by MainScope() {
     val downloadFailChapters = hashMapOf<Int, Int>()
     val downloadScope = CoroutineScope(SupervisorJob() + IO)
     val preDownloadSemaphore = Semaphore(ReadConstants.PRE_DOWNLOAD_CONCURRENCY)
+    // 章节级图片准备任务：章节切换时取消，避免旧章节结果串到新章节
+    private var chapterPrepareJob: Job? = null
+    private var chapterReadyNotified = false
+    // src -> 私有缓存文件绝对路径：由章节级批量准备填充，供预加载直接复用本地文件（零磁盘 IO）
+    val chapterReadyFiles = ConcurrentHashMap<String, String>()
     var rateLimiter = ConcurrentRateLimiter(null)
     val mangaContents get() = buildMangaContent()
     val hasNextChapter get() = durChapterIndex < simulatedChapterSize - 1
@@ -239,6 +247,8 @@ object ReadManga : CoroutineScope by MainScope() {
         when (val offset = chapter.index - durChapterIndex) {
             0 -> {
                 if (content == null) {
+                    // 断网 / 清缓存后正文不可用：先尝试用 Download 里已导出的图片离线打开本章
+                    if (tryLoadOfflineChapter(chapter)) return
                     mCallback?.loadFail(errorMsg)
                     return
                 }
@@ -253,6 +263,8 @@ object ReadManga : CoroutineScope by MainScope() {
                 }
                 curMangaChapter = mangaChapter
                 mCallback?.upContent()
+                // 先渲染再异步准备：本地图导入与就绪判定都不阻塞章节显示
+                prepareChapterImagesAsync(chapter, content)
             }
 
             -1, 1 -> {
@@ -273,6 +285,61 @@ object ReadManga : CoroutineScope by MainScope() {
             }
         }
     }
+
+    /**
+     * 章节切换/重新打开时重置图片准备状态，并取消上一章尚未完成的准备任务。
+     */
+    fun resetChapterImageState() {
+        chapterPrepareJob?.cancel()
+        chapterPrepareJob = null
+        chapterReadyFiles.clear()
+        chapterReadyNotified = false
+    }
+
+    /**
+     * 章节内容就绪后异步准备本章图片：
+     * - 一次查询 Download 已导出图并批量导入私有缓存（不主动联网）；
+     * - 按"私有缓存文件是否全部就绪"判定全章就绪，**不依赖 Glide 渲染与用户滚动**；
+     * - 就绪路径写入 [chapterReadyFiles]，供预加载直接复用本地文件。
+     *
+     * 这里刻意用正文原始 <img> 序列（不去重）：其下标恰好等于导出编号 - 1，
+     * 避免与漫画页 distinctUntilChanged 后的序号错位而贴错图。
+     * 全程 IO、支持取消、异常兜底；只有结果仍属当前章节时才写状态/发提示。
+     */
+    private fun prepareChapterImagesAsync(chapter: BookChapter, content: String) {
+        val book = book ?: return
+        val targetChapterIndex = chapter.index
+        resetChapterImageState()
+        chapterPrepareJob = launch(IO) {
+            runCatching {
+                val srcList = BookHelp.flowImages(chapter, content).toList()
+                if (srcList.isEmpty()) return@launch
+                val sourceName = BookHelp.chapterExportSourceName(book, bookSource)
+                val result = BookHelp.prepareChapterImages(book, chapter, sourceName, srcList)
+                // 准备期间用户可能已切章：丢弃过期结果，避免把上一章的提示弹到新章节
+                if (targetChapterIndex != durChapterIndex) return@launch
+                ensureActive()
+                result.readyPaths.forEach { (src, path) -> chapterReadyFiles[src] = path }
+                if (!chapterReadyNotified && result.total > 0 && result.ready >= result.total) {
+                    chapterReadyNotified = true
+                    withContext(Main) {
+                        if (targetChapterIndex == durChapterIndex) {
+                            mCallback?.onChapterImagesReady()
+                        }
+                    }
+                } else if (result.ready < result.total) {
+                    AppLog.put(
+                        "本章图片未全部就绪 ${result.ready}/${result.total}（${book.name} ${chapter.title}），" +
+                                "缺失部分按原方案按需加载，暂不提示"
+                    )
+                }
+            }.onFailure {
+                if (it is CancellationException) return@onFailure
+                AppLog.put("本章图片准备异常 ${book.name} ${chapter.title}: ${it.localizedMessage}")
+            }
+        }
+    }
+
     //构建漫画内容
     private fun buildMangaContent(): MangaContent {
         val items = arrayListOf<BaseMangaPage>()
@@ -316,6 +383,7 @@ object ReadManga : CoroutineScope by MainScope() {
             prevMangaChapter = curMangaChapter
             curMangaChapter = nextMangaChapter
             nextMangaChapter = null
+            resetChapterImageState()
             if (curMangaChapter == null) {
                 mCallback?.startLoad()
                 loadContent(durChapterIndex)
@@ -343,6 +411,7 @@ object ReadManga : CoroutineScope by MainScope() {
             nextMangaChapter = curMangaChapter
             curMangaChapter = prevMangaChapter
             prevMangaChapter = null
+            resetChapterImageState()
             if (curMangaChapter == null) {
                 loadContent(durChapterIndex)
             } else {
@@ -625,36 +694,73 @@ object ReadManga : CoroutineScope by MainScope() {
         if (mCallback === cb) {
             mCallback = null
         }
+        // 页面销毁时一并取消章节图片准备，避免协程继续持有 Activity 回调
+        resetChapterImageState()
         preDownloadTask?.cancel()
         preDownloadTask = null
         downloadScope.coroutineContext.cancelChildren()
         coroutineContext.cancelChildren()
     }
 
-    private suspend fun getManageChapter(chapter: BookChapter, content: String): MangaChapter {
-        val list = BookHelp.flowImages(chapter, content)
-            .distinctUntilChanged().mapIndexed { index, src ->
-                MangaPage(
-                    chapterIndex = chapter.index,
-                    chapterSize = chapterSize,
-                    mImageUrl = src,
-                    index = index,
-                    mChapterName = chapter.title
-                )
-            }.toList()
+    private suspend fun getManageChapter(chapter: BookChapter, content: String): MangaChapter =
+        buildMangaChapter(chapter, BookHelp.flowImages(chapter, content).toList(), null)
 
+    /**
+     * 由"正文图片 URL 序列"构造漫画章节。srcList 的下标即导出编号 - 1（含相邻重复）。
+     * 漫画页要去掉相邻重复图，因此同步记录 "漫画页序号 -> 导出序列下标" 的映射，避免本地图贴错页。
+     * knownLocalMap 由离线兜底传入（已查询过），为空时按统一书源名做一次精确查询。
+     */
+    private suspend fun buildMangaChapter(
+        chapter: BookChapter,
+        srcList: List<String>,
+        knownLocalMap: Map<Int, String>?
+    ): MangaChapter {
+        val displaySrc = ArrayList<String>(srcList.size)
+        val displayToExport = ArrayList<Int>(srcList.size)
+        var lastSrc: String? = null
+        srcList.forEachIndexed { exportIndex, src ->
+            if (src != lastSrc) {
+                lastSrc = src
+                displaySrc.add(src)
+                displayToExport.add(exportIndex)
+            }
+        }
+        val list = displaySrc.mapIndexed { index, src ->
+            MangaPage(
+                chapterIndex = chapter.index,
+                chapterSize = chapterSize,
+                mImageUrl = src,
+                index = index,
+                mChapterName = chapter.title
+            )
+        }
         val imageCount = list.size
 
+        val bk = book
+        val localMap = when {
+            knownLocalMap != null -> knownLocalMap
+            bk != null -> BookHelp.findLocalImagesWithCandidates(
+                bk, chapter, BookHelp.chapterExportSourceName(bk, bookSource)
+            )
+            else -> emptyMap()
+        }
         list.forEach {
             it.imageCount = imageCount
+            it.localPath = localMap[displayToExport.getOrNull(it.index) ?: it.index]
         }
 
         if (AppConfig.hideMangaTitle && imageCount > 0) {
             return MangaChapter(chapter, list, imageCount)
         }
+        return MangaChapter(chapter, buildMangaPages(chapter, list, imageCount), imageCount)
+    }
 
+    private fun buildMangaPages(
+        chapter: BookChapter,
+        list: List<MangaPage>,
+        imageCount: Int
+    ): List<BaseMangaPage> {
         val pages = mutableListOf<BaseMangaPage>()
-
         if (imageCount == 0 && chapter.isVolume) {
             pages.add(ReaderLoading(chapter.index, -1, chapter.title, true))
         } else {
@@ -662,8 +768,86 @@ object ReadManga : CoroutineScope by MainScope() {
             pages.addAll(list)
             pages.add(ReaderLoading(chapter.index, imageCount, "已读完 ${chapter.title}"))
         }
+        return pages
+    }
 
-        return MangaChapter(chapter, pages, imageCount)
+    /** 无清单的历史章节：按导出编号顺序直接把本地文件当作图片源渲染。 */
+    private fun buildOfflineMangaChapter(
+        chapter: BookChapter,
+        localPaths: Map<Int, String>
+    ): MangaChapter {
+        val imageCount = localPaths.size
+        val list = localPaths.toSortedMap().values.mapIndexed { index, path ->
+            MangaPage(
+                chapterIndex = chapter.index,
+                chapterSize = chapterSize,
+                mImageUrl = "offline://${chapter.index}/$index",
+                index = index,
+                mChapterName = chapter.title
+            ).apply {
+                this.imageCount = imageCount
+                localPath = path
+                directLocal = true
+            }
+        }
+        return MangaChapter(chapter, buildMangaPages(chapter, list, imageCount), imageCount)
+    }
+
+    /**
+     * 断网 / 清缓存后的离线兜底：正文缓存为空且网络失败时，用 Download 里已导出的图片直接打开章节。
+     * 有清单 → 还原 URL 序列、先把本地图导入私有缓存再上屏（复用现有渲染链路）；
+     * 无清单 → 按编号直接渲染本地文件（历史章节无需重新导出）。
+     * 全程 IO、支持取消、异常全兜底；只有结果仍属当前章节时才上屏。
+     */
+    private suspend fun tryLoadOfflineChapter(chapter: BookChapter): Boolean = withContext(IO) {
+        val bk = book ?: return@withContext false
+        val targetIndex = chapter.index
+        if (targetIndex != durChapterIndex) return@withContext false
+        resetChapterImageState()
+        val sourceName = BookHelp.chapterExportSourceName(bk, bookSource)
+        runCatching {
+            val manifest = BookHelp.readChapterManifest(bk, chapter, sourceName)
+            val localMap = BookHelp.findLocalImagesWithCandidates(bk, chapter, sourceName)
+            if (localMap.isEmpty()) {
+                AppLog.put("离线兜底未找到本地图片 ${bk.name} ${chapter.title}")
+                return@runCatching false
+            }
+            ensureActive()
+            val offlineCount: Int
+            val mangaChapter: MangaChapter
+            if (manifest != null && manifest.images.isNotEmpty()) {
+                val result = BookHelp.prepareChapterImages(
+                    bk, chapter, sourceName, manifest.images, localMap
+                )
+                result.readyPaths.forEach { (src, path) -> chapterReadyFiles[src] = path }
+                offlineCount = result.ready
+                mangaChapter = buildMangaChapter(chapter, manifest.images, localMap)
+                AppLog.put(
+                    "离线兜底(清单) ${bk.name} ${chapter.title}：清单 ${manifest.count} 张，" +
+                            "本地 ${localMap.size} 张，缓存就绪 ${result.ready} 张"
+                )
+            } else {
+                val materialized = BookHelp.materializeLocalImages(bk, chapter, localMap)
+                if (materialized.isEmpty()) return@runCatching false
+                offlineCount = materialized.size
+                mangaChapter = buildOfflineMangaChapter(chapter, materialized)
+                AppLog.put("离线兜底(直读) ${bk.name} ${chapter.title}：本地 $offlineCount 张")
+            }
+            if (targetIndex != durChapterIndex) return@runCatching false
+            ensureActive()
+            withContext(Main) {
+                if (targetIndex == durChapterIndex) {
+                    curMangaChapter = mangaChapter
+                    mCallback?.upContent()
+                    mCallback?.onChapterOfflineReady(offlineCount)
+                }
+            }
+            true
+        }.getOrElse {
+            if (it is CancellationException) throw it
+            AppLog.put("离线章节兜底失败 ${bk.name} ${chapter.title}: ${it.localizedMessage}")
+            false
+        }
     }
 
     interface Callback {
@@ -672,5 +856,9 @@ object ReadManga : CoroutineScope by MainScope() {
         fun sureNewProgress(progress: BookProgress)
         fun showLoading()
         fun startLoad()
+        /** 当前章节所有图片加载完成时回调；默认空实现，避免影响其它实现者 */
+        fun onChapterImagesReady() {}
+        /** 离线兜底成功时回调，count 为实际可用的本地图片张数 */
+        fun onChapterOfflineReady(count: Int) {}
     }
 }

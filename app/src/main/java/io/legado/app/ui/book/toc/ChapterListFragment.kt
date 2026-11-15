@@ -159,9 +159,15 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     private fun initCacheFileNames(book: Book) {
         viewScope.launch(IO) {
             val fileNames = BookHelp.getChapterFiles(book)
+            // 整书一次扫描（每个候选书源名一次查询），绝不逐章查 MediaStore，避免目录卡顿。
+            val downloaded = runCatching {
+                BookHelp.listDownloadedChapters(book, BookHelp.chapterExportSourceName(book))
+            }.getOrDefault(emptyMap<String, Int>())
             withContext(Main) {
                 adapter.cacheFileNames.clear()
                 adapter.cacheFileNames.addAll(fileNames)
+                adapter.downloadedChapters.clear()
+                adapter.downloadedChapters.putAll(downloaded)
                 adapter.notifyItemRangeChanged(0, adapter.itemCount, true)
             }
         }

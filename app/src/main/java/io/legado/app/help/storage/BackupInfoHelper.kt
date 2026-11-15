@@ -4,6 +4,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.repository.CoverGalleryRepository
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookLocalCover
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.model.BookCover
@@ -88,6 +89,7 @@ object BackupInfoHelper {
         "applyRestoreConfig" to "应用恢复配置",
         "themeBackgroundImages" to "主题背景图片",
         CoverGalleryRepository.backupDirName to "封面图集",
+        BookLocalCover.BACKUP_DIR_NAME to "本地书籍封面",
         "bookshelf.json" to "书架书籍",
         "bookmark.json" to "书签",
         "bookGroup.json" to "书籍分组",
@@ -204,6 +206,7 @@ object BackupInfoHelper {
         addConfigItems(::addItem)
         addBackgroundItems(::addItem)
         addCoverGalleryItem(::addItem)
+        addBookCoversItem(::addItem)
 
         return BackupOverview(items, totalSize, selectedSize)
     }
@@ -251,6 +254,14 @@ object BackupInfoHelper {
             .distinctBy { it.absolutePath }
             .sumOf { it.length() }
         addItem("backgroundImages", totalBgSize)
+    }
+
+    /** 批量保存到本机的书籍封面：按目录里实际文件求和，与实际写入口径一致。 */
+    private fun addBookCoversItem(addItem: (String, Long) -> Unit) {
+        val size = BookLocalCover.dir.listFiles()
+            ?.filter { it.isFile }
+            ?.sumOf { it.length() } ?: 0L
+        addItem(BookLocalCover.BACKUP_DIR_NAME, size)
     }
 
     private fun addCoverGalleryItem(addItem: (String, Long) -> Unit) {

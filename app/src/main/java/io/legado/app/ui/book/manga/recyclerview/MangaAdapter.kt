@@ -97,7 +97,8 @@ class MangaAdapter(private val context: Context) :
                 if (item is MangaPage) {
                     val isLastImage = item.imageCount > 0 && item.index == item.imageCount - 1
                     loadImageWithRetry(
-                        item.mImageUrl, isHorizontal, isLastImage, mTransformation
+                        item.mImageUrl, isHorizontal, isLastImage, mTransformation,
+                        item.localPath, item.directLocal
                     )
                 }
             }
@@ -106,7 +107,10 @@ class MangaAdapter(private val context: Context) :
         fun onBind(item: MangaPage) {
             setImageColorFilter()
             val isLastImage = item.imageCount > 0 && item.index == item.imageCount - 1
-            loadImageWithRetry(item.mImageUrl, isHorizontal, isLastImage, mTransformation)
+            loadImageWithRetry(
+                item.mImageUrl, isHorizontal, isLastImage, mTransformation,
+                item.localPath, item.directLocal
+            )
         }
 
         fun setImageColorFilter() {
@@ -239,9 +243,16 @@ class MangaAdapter(private val context: Context) :
 
     override fun getPreloadRequestBuilder(item: Any): RequestBuilder<*>? {
         if (item is MangaPage) {
+            // 章节级批量准备已把 Download 本地图导入私有缓存；优先用本地文件路径预加载，
+            // 避免仍按网络 URL 发起请求而让"本地优先"看起来没生效。查内存 Map，零磁盘 IO。
+            val path = if (item.directLocal) {
+                item.localPath ?: item.mImageUrl
+            } else {
+                ReadManga.chapterReadyFiles[item.mImageUrl] ?: item.mImageUrl
+            }
             return BookCover.preloadManga(
                 context,
-                item.mImageUrl,
+                path,
                 sourceOrigin = ReadManga.book?.origin,
             )
         }

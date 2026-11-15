@@ -22,6 +22,10 @@ object MD5Utils {
         return MD5Digester.digestHex(str)
     }
 
+    fun md5Encode(bytes: ByteArray): String {
+        return MD5Digester.digestHex(bytes)
+    }
+
     fun md5Encode(inputStream: InputStream): String {
         return MD5Digester.digestHex(inputStream)
     }

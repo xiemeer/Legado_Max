@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
+import androidx.core.os.bundleOf
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,6 +16,7 @@ import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookSourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
@@ -32,6 +34,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import splitties.views.onClick
 
@@ -53,6 +56,16 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
     }
     private var sourceFlowJob: Job? = null
 
+    /** 需要筛选的书源类型，[SOURCE_TYPE_ANY] 表示不限。 */
+    private val sourceType: Int by lazy {
+        arguments?.getInt(ARG_SOURCE_TYPE, SOURCE_TYPE_ANY) ?: SOURCE_TYPE_ANY
+    }
+
+    /** true 表示这次选源是给「批量改地址」用的，回调走专用通道而不是搜索式换源。 */
+    private val forUrlChange: Boolean by lazy {
+        arguments?.getBoolean(ARG_FOR_URL_CHANGE, false) ?: false
+    }
+
     override fun onStart() {
         super.onStart()
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -66,7 +79,12 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
 
     private fun initView() {
         binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.title = "选择书源"
+        binding.toolBar.title = when (sourceType) {
+            BookSourceType.default -> getString(R.string.change_source_picker_title_text)
+            BookSourceType.image -> getString(R.string.change_source_picker_title_image)
+            BookSourceType.audio -> getString(R.string.change_source_picker_title_audio)
+            else -> getString(R.string.change_source_picker_title_all)
+        }
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
         searchView.applyTint(primaryTextColor)
@@ -90,6 +108,10 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
             when {
                 searchKey.isNullOrEmpty() -> appDb.bookSourceDao.flowEnabled()
                 else -> appDb.bookSourceDao.flowSearchEnabled(searchKey)
+            }.map { list ->
+                // 图片书只能换图片源、文本同理：类型对不上的源换过去目录规则必然失败
+                if (sourceType == SOURCE_TYPE_ANY) list
+                else list.filter { it.bookSourceType == sourceType }
             }.catch {
                 AppLog.put("书源选择界面获取书源数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).collect {
@@ -140,7 +162,11 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
             binding.root.onClick {
                 getItemByLayoutPosition(holder.layoutPosition)?.let {
                     it.getBookSource()?.let { source ->
-                        callback?.sourceOnClick(source)
+                        if (forUrlChange) {
+                            callback?.onSourcePickedForUrlChange(source)
+                        } else {
+                            callback?.sourceOnClick(source)
+                        }
                     }
                     dismissAllowingStateLoss()
                 }
@@ -156,6 +182,28 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
 
     interface Callback {
         fun sourceOnClick(source: BookSource)
+
+        /** 默认实现让未接入「批量改地址」的调用方保持原行为。 */
+        fun onSourcePickedForUrlChange(source: BookSource) {
+            sourceOnClick(source)
+        }
+    }
+
+    companion object {
+        const val SOURCE_TYPE_ANY = -1
+        private const val ARG_SOURCE_TYPE = "sourceType"
+        private const val ARG_FOR_URL_CHANGE = "forUrlChange"
+
+        /** 按书源类型创建一个只显示对应类型书源的选择器。 */
+        fun newInstance(
+            sourceType: Int = SOURCE_TYPE_ANY,
+            forUrlChange: Boolean = false,
+        ) = SourcePickerDialog().apply {
+            arguments = bundleOf(
+                ARG_SOURCE_TYPE to sourceType,
+                ARG_FOR_URL_CHANGE to forUrlChange
+            )
+        }
     }
 
 }
